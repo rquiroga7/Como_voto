@@ -44,8 +44,32 @@
         </div>
     </header>
 
+    <!-- ============ STATS BAR ============ -->
+    <section class="stats-bar" id="stats-bar">
+        <div class="container">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <span class="stat-number" id="stat-legislators">-</span>
+                    <span class="stat-label">Legisladores</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number" id="stat-votaciones">-</span>
+                    <span class="stat-label">Votaciones</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number" id="stat-years">-</span>
+                    <span class="stat-label">Años cubiertos</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number" id="stat-updated">-</span>
+                    <span class="stat-label">Última actualización</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- ============ SEARCH SECTION ============ -->
-    <section class="search-section">
+    <section class="search-section card-outline">
         <div class="container">
             <div class="search-box">
                 <label for="search-input" class="search-label">Buscá un Diputado/a o Senador/a</label>
@@ -115,32 +139,8 @@
         </div>
     </section>
 
-    <!-- ============ STATS BAR ============ -->
-    <section class="stats-bar" id="stats-bar">
-        <div class="container">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <span class="stat-number" id="stat-legislators">-</span>
-                    <span class="stat-label">Legisladores</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-number" id="stat-votaciones">-</span>
-                    <span class="stat-label">Votaciones</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-number" id="stat-years">-</span>
-                    <span class="stat-label">Años cubiertos</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-number" id="stat-updated">-</span>
-                    <span class="stat-label">Última actualización</span>
-                </div>
-            </div>
-        </div>
-    </section>
-
     <!-- ============ LAW SEARCH SECTION (homepage) ============ -->
-    <section class="law-search-section" id="law-search-section">
+    <section class="law-search-section card-outline" id="law-search-section">
         <div class="container">
             <h2 class="section-title">📜 Buscá una Ley</h2>
             <p class="section-desc">Mirá cómo votó cada bloque en las leyes del Congreso</p>
@@ -206,11 +206,12 @@
     <section class="ranking-section" id="ranking-section">
         <div class="container">
             <!-- ---- Ranking 1: Cantidad de Votos ---- -->
-            <div class="ranking-title-row">
-                <div>
-                    <h2 class="section-title">🏆 Ranking de Legisladores por Cantidad de Votos</h2>
-                    <p class="section-desc">Ordená legisladores por votaciones, presentismo y ausencias</p>
-                </div>
+            <div class="ranking-card card-outline" id="ranking-votos-card">
+                <div class="ranking-title-row" id="ranking-votos">
+                    <div>
+                        <h2 class="section-title">🏆 Ranking de Legisladores por Cantidad de Votos</h2>
+                        <p class="section-desc">Ordená legisladores por votaciones, presentismo y ausencias</p>
+                    </div>
                 <div class="ranking-export-row">
                     <button class="btn-share" id="btn-copy-rv" title="Copiar imagen al portapapeles">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -219,6 +220,10 @@
                     <button class="btn-share" id="btn-download-rv" title="Descargar imagen">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         Descargar
+                    </button>
+                    <button class="btn-share" id="btn-share-rv" title="Compartir en X (Twitter)">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                        Compartir
                     </button>
                 </div>
             </div>
@@ -285,13 +290,15 @@
                 </table>
             </div>
             <div class="votes-pagination" id="rv-pagination"></div>
+            </div>
 
             <!-- ---- Ranking 2: Afinidad Política ---- -->
-            <div class="ranking-title-row" style="margin-top:3rem">
-                <div>
-                    <h2 class="section-title">📊 Ranking de mandatos por Afinidad Política</h2>
-                    <p class="section-desc">Cada fila corresponde a uno o más mandatos por legislador, agrupado según la coalición a la que pertenecía el partido o alianza cuya lista integró el legislador en la elección. Las cantidades de votos muestran afinidad con el voto mayoritario de cada coalición (sólo para votaciones divididas).</p>
-                </div>
+            <div class="ranking-card card-outline" id="ranking-afinidad-card">
+                <div class="ranking-title-row" id="ranking-afinidad">
+                    <div>
+                        <h2 class="section-title">📊 Ranking de mandatos por Afinidad Política</h2>
+                        <p class="section-desc">Cada fila corresponde a uno o más mandatos por legislador, agrupado según la coalición a la que pertenecía el partido o alianza cuya lista integró el legislador en la elección. Las cantidades de votos muestran afinidad con el voto mayoritario de cada coalición (sólo para votaciones divididas).</p>
+                    </div>
                 <div class="ranking-export-row">
                     <button class="btn-share" id="btn-copy-ra" title="Copiar imagen al portapapeles">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -301,16 +308,31 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         Descargar
                     </button>
+                    <button class="btn-share" id="btn-share-ra" title="Compartir en X (Twitter)">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                        Compartir
+                    </button>
                 </div>
             </div>
             <div class="ranking-controls">
                 <div class="ranking-controls-row">
                     <div class="filter-group">
+                        <label for="ra-coalition">Coalición por la que fue votado/a</label>
+                        <select id="ra-coalition">
+                            <option value="">Todas</option>
+                            <option value="PJ">PJ / UxP</option>
+                            <option value="UCR">UCR / ARI</option>
+                            <option value="JxC">JxC / PRO / UCR</option>
+                            <option value="LLA">LLA / PRO</option>
+                            <option value="OTROS">Otros</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
                         <label for="ra-sort">Ordenar por</label>
                         <select id="ra-sort">
                             <option value="vpj">Votos con PJ</option>
                             <option value="vucr">Votos con UCR</option>
-                            <option value="vpro">Votos con PRO</option>
+                            <option value="vpro">Votos con JxC</option>
                             <option value="vlla">Votos con LLA</option>
                         </select>
                     </div>
@@ -327,17 +349,6 @@
                             <option value="">Todas</option>
                             <option value="diputados">Diputados</option>
                             <option value="senadores">Senadores</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label for="ra-coalition">Coalición por la que fue votado/a</label>
-                        <select id="ra-coalition">
-                            <option value="">Todas</option>
-                            <option value="PJ">PJ / UxP</option>
-                            <option value="UCR">UCR / ARI</option>
-                            <option value="PRO">JxC / PRO / UCR</option>
-                            <option value="LLA">LLA / PRO</option>
-                            <option value="OTROS">Otros</option>
                         </select>
                     </div>
                     <div class="filter-group">
@@ -360,7 +371,7 @@
                             <th>Partido/Alianza</th>
                             <th class="ranking-sortable" data-col="vpj">PJ</th>
                             <th class="ranking-sortable" data-col="vucr">UCR</th>
-                            <th class="ranking-sortable" data-col="vpro">PRO</th>
+                            <th class="ranking-sortable" data-col="vpro">JxC</th>
                             <th class="ranking-sortable" data-col="vlla">LLA</th>
                         </tr>
                     </thead>
@@ -368,6 +379,7 @@
                 </table>
             </div>
             <div class="votes-pagination" id="ra-pagination"></div>
+            </div>
         </div>
     </section>
 

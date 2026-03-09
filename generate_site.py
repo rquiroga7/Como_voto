@@ -31,7 +31,7 @@ import time
 # Import ConsolidatedDB and helpers from scraper
 from scraper import ConsolidatedDB, classify_bloc, VOTE_DECODE, PJ_KEYWORDS, LLA_KEYWORDS
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 DOCS_DIR = BASE_DIR / "docs"
 DOCS_DATA_DIR = DOCS_DIR / "data"
@@ -765,23 +765,63 @@ def _parse_vote_date(d: str) -> datetime:
             return datetime.min
 
 
-def _count_trailing_ausente(votes: list[dict]) -> int:
-    """Count AUSENTE votes that occur after the legislator's last active vote.
+def _count_trailing_ausente(
+    votes: list[dict],
+    terms: list[dict] | None = None,
+) -> int:
+    """Count AUSENTE votes that occur after the legislator's name no longer
+    appears in votacion data.
 
-    When a legislator leaves office (death, resignation, appointment to
-    another role), they stop attending votes but remain on the chamber
-    roster.  All votes after their last attendance are recorded as AUSENTE.
-    These trailing absences should not count against their presentismo.
+    New logic: For each term (mandato), check if the legislator's name appears
+    in votaciones through the end of their term. If their last vote (of any type)
+    is an AUSENTE vote, it means they were still in office but absent - this
+    should NOT count as trailing. Only count AUSENTE votes that occur after the
+    legislator's name completely disappears from votacion data.
+
+    The votes list contains all votes where the legislator's name appears
+    (including AUSENTE). So if the last vote in the list is AUSENTE, the
+    legislator was still in office - no trailing ausente.
     """
     if not votes:
         return 0
+
+    from datetime import datetime
+
+    def _parse_date(d: str) -> datetime:
+        try:
+            return datetime.strptime(d.split(" - ")[0], "%d/%m/%Y")
+        except (ValueError, AttributeError):
+            try:
+                return datetime.strptime(d[:10], "%d/%m/%Y")
+            except (ValueError, AttributeError):
+                return datetime.min
+
+    # Sort votes by date to find the last vote where the legislator's name appears
+    sorted_votes = sorted(votes, key=lambda v: _parse_date(v.get("d", "")))
+    if not sorted_votes:
+        return 0
+
+    # Get the last vote date where the legislator's name appears
+    last_vote = sorted_votes[-1]
+    last_present_date = _parse_date(last_vote.get("d", ""))
+    last_vote_type = last_vote.get("v", "")
+
+    # If the last vote is AUSENTE, the legislator was still in office
+    # (their name was recorded). Don't count any trailing ausente.
+    # This is the key change: AUSENTE means they were still in the roster.
+    if last_vote_type == "AUSENTE":
+        return 0
+
+    # If the last vote is not AUSENTE, use the old logic as fallback:
+    # count AUSENTE votes after the last non-AUSENTE vote
     non_ausente = [v for v in votes if v.get("v") != "AUSENTE"]
     if not non_ausente:
         return 0  # Never attended — don't exclude anything
-    last_active_dt = max(_parse_vote_date(v.get("d", "")) for v in non_ausente)
+
+    last_active_dt = max(_parse_date(v.get("d", "")) for v in non_ausente)
     trailing = sum(
         1 for v in votes
-        if v.get("v") == "AUSENTE" and _parse_vote_date(v.get("d", "")) > last_active_dt
+        if v.get("v") == "AUSENTE" and _parse_date(v.get("d", "")) > last_active_dt
     )
     return trailing
 
@@ -813,6 +853,8 @@ NAME_ALIASES: dict[str, str] = {
     "BASUALDO, ROBERTO":                   "BASUALDO, ROBERTO GUSTAVO",
     "COBOS, JULIO":                        "COBOS, JULIO CESAR CLETO",
     "CORNEJO, ALFREDO":                    "CORNEJO, ALFREDO VICTOR",
+    # "Ilda" is a nickname/short form of "Hilda" - same person
+    "GONZALEZ DE DUHALDE, ILDA":           "GONZALEZ DE DUHALDE, HILDA BEATRIZ",
     "FELLNER, LILIANA":                    "FELLNER, LILIANA BEATRIZ",
     "FERNANDEZ DE KIRCHNER, CRISTINA E.":  "FERNANDEZ DE KIRCHNER, CRISTINA",
     "FILMUS, DANIEL":                      "FILMUS, DANIEL FERNANDO",
@@ -2081,11 +2123,11 @@ def generate_site_data(legislators: dict, law_groups: dict):
         )
 
         # Compute presentismo, ausencias, abstenciones for ranking.
-        # Exclude trailing AUSENTE votes after the legislator's last
-        # active (non-AUSENTE) vote — these occur when a legislator
-        # leaves office (death, resignation, new post) but remains in
-        # the chamber roster until the seat is formally vacated.
-        trailing_ausente = _count_trailing_ausente(leg["votes"])
+        # Exclude trailing AUSENTE votes after the legislator's name
+        # disappears from votacion data. If their last recorded vote is
+        # AUSENTE, they were still in office (name was recorded) — don't
+        # count as trailing.
+        trailing_ausente = _count_trailing_ausente(leg["votes"], terms)
 
         total_ausente = sum(
             s.get("AUSENTE", 0) for s in leg["yearly_stats"].values()
@@ -2096,7 +2138,7 @@ def generate_site_data(legislators: dict, law_groups: dict):
         effective_total = total_votes - trailing_ausente
         effective_ausente = total_ausente - trailing_ausente
         total_present = effective_total - effective_ausente
-        presentismo_pct = round(total_present / effective_total * 100, 1) if effective_total > 0 else None
+        presentismo_pct = round(total_present / effective_total * 100) if effective_total > 0 else None
 
         chambers = sorted(set(leg["chambers"]))
         chamber_display = (
@@ -2288,7 +2330,7 @@ def generate_site_data(legislators: dict, law_groups: dict):
             "province": leg["province"],
             "coalition": detail_coalition,
             "yearly_stats": leg["yearly_stats"],
-            "trailing_ausente": _count_trailing_ausente(leg["votes"]),
+            "trailing_ausente": _count_trailing_ausente(leg["votes"], leg.get("_terms") or compute_terms(leg)),
             "yearly_alignment": yearly_alignment_pct,
             "alignment": {
                 c: compute_weighted_alignment(leg["yearly_alignment"], c)

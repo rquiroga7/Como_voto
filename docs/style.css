@@ -94,7 +94,25 @@ body {
 
 /* ====== SEARCH ====== */
 .search-section {
-    padding: 2rem 0 1rem;
+    padding: 1.5rem 0 1rem;
+}
+
+.search-section.card-outline,
+.law-search-section.card-outline {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 2rem 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.search-section.card-outline .container,
+.law-search-section.card-outline .container {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
 }
 
 .search-box {
@@ -103,10 +121,14 @@ body {
     margin: 0 auto 1.5rem;
 }
 
+.ranking-section:not(:has(.ranking-card)) .container {
+    margin-top: 1rem;
+}
+
 .search-label {
     display: block;
-    font-weight: 600;
-    font-size: 1.1rem;
+    font-weight: 700;
+    font-size: 1.5rem;
     margin-bottom: 0.5rem;
     text-align: center;
 }
@@ -295,7 +317,8 @@ body {
 
 /* ====== STATS BAR ====== */
 .stats-bar {
-    padding: 1.5rem 0;
+    padding: 1rem 0;
+    background: var(--color-background);
 }
 
 .stats-grid {
@@ -308,7 +331,7 @@ body {
     background: var(--color-surface);
     padding: 1.25rem;
     border-radius: var(--radius);
-    box-shadow: var(--shadow);
+    border: 1px solid var(--color-border);
     text-align: center;
     display: flex;
     flex-direction: column;
@@ -329,7 +352,37 @@ body {
 
 /* ====== RANKING SECTION ====== */
 .ranking-section {
-    padding: 2rem 0;
+    padding: 1rem 0 2rem;
+}
+
+.ranking-section:not(:has(.ranking-card)) .container {
+    margin-top: 1rem;
+}
+
+/* Card outline style for sections */
+.card-outline,
+.ranking-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 2rem 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    margin-bottom: 1.5rem;
+}
+
+/* Remove container styling when card-outline is used on section */
+.search-section.card-outline .container,
+.law-search-section.card-outline .container,
+.ranking-card .container {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+}
+
+.ranking-card {
+    margin-top: 1rem;
 }
 
 .ranking-controls {
@@ -426,9 +479,9 @@ body {
 
 .ranking-title-row {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
+    text-align: center;
     gap: 0.5rem;
 }
 .ranking-title-row .section-title { margin-bottom: 0; }
@@ -438,6 +491,11 @@ body {
     display: flex;
     gap: 0.5rem;
     align-items: center;
+    justify-content: flex-end;
+    width: 100%;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border);
 }
 
 /* ====== LEGISLATOR DETAIL ====== */
@@ -1346,7 +1404,11 @@ body {
 
 /* ====== LAW SEARCH SECTION ====== */
 .law-search-section {
-    padding: 2rem 0;
+    padding: 1rem 0 2rem;
+}
+
+.law-search-section:not(.card-outline) .container {
+    margin-top: 1rem;
 }
 
 .section-title {

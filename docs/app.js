@@ -30,6 +30,11 @@ const LAWS_PER_PAGE = 10;
 
 const DATA_PATH = "data";
 
+// Normalize text for search: remove accents and convert to lowercase
+function normalizeText(text) {
+    return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
 // Widget instance for the multi-year waffle dropdown
 let _waffleYearWidget = null;
 
@@ -117,6 +122,7 @@ function initMultiSelect(selectEl, placeholder = "Todos") {
 
 function onSearchInput({ requireQuery = true } = {}) {
     const query = document.getElementById("search-input").value.trim().toLowerCase();
+    const queryNorm = normalizeText(query);
     const chamber = document.getElementById("filter-chamber").value;
     const coalition = document.getElementById("filter-coalition").value;
     const province = (document.getElementById("filter-province")?.value || "").trim();
@@ -141,9 +147,9 @@ function onSearchInput({ requireQuery = true } = {}) {
         results = results.filter((l) => (l.p || "").toLowerCase() === pv);
     }
     if (query) {
-        const terms = query.split(/\s+/);
+        const terms = queryNorm.split(/\s+/);
         results = results.filter((l) => {
-            const searchable = `${l.n} ${l.b} ${l.p}`.toLowerCase();
+            const searchable = normalizeText(`${l.n} ${l.b} ${l.p}`);
             return terms.every((t) => searchable.includes(t));
         });
     }
@@ -194,8 +200,10 @@ function chamberBadges(chamberStr) {
 function highlightMatch(name) {
     const query = document.getElementById("search-input").value.trim();
     if (!query) return escapeHtml(name);
-    const regex = new RegExp(`(${escapeRegex(query)})`, "gi");
-    return escapeHtml(name).replace(regex, "<strong>$1</strong>");
+    // Highlight matching text (case-insensitive) in the original name
+    const escapedName = escapeHtml(name);
+    const simpleRegex = new RegExp(`(${escapeRegex(query)})`, "gi");
+    return escapedName.replace(simpleRegex, "<strong>$1</strong>");
 }
 
 function hideSearchResults() {
@@ -208,6 +216,7 @@ function hideSearchResults() {
 
 function onLawSearchInput() {
     const query = document.getElementById("law-search").value.trim().toLowerCase();
+    const queryNorm = normalizeText(query);
     const yearVal = (document.getElementById("law-year-filter")?.value || "");
     const chamberVal = document.getElementById("law-chamber-filter").value;
     const dropdown = document.getElementById("law-search-results");
@@ -228,9 +237,9 @@ function onLawSearchInput() {
         results = results.filter((l) => l.ch === chamberVal);
     }
     if (query) {
-        const terms = query.split(/\s+/);
+        const terms = queryNorm.split(/\s+/);
         results = results.filter((l) => {
-            const searchable = (l.n || "").toLowerCase();
+            const searchable = normalizeText(l.n || "");
             return terms.every((t) => searchable.includes(t));
         });
     }
@@ -600,10 +609,29 @@ function renderRankingTable(prefix, sortCol, asc, columns, cellRenderer, dataSou
     let page_ref = prefix === "rv" ? { get: () => rvPage, set: v => { rvPage = v; } }
                                     : { get: () => raPage, set: v => { raPage = v; } };
 
+    // For the alignment ranking (ra), map grouped coalition filters to actual co_electoral values
+    // JxC includes PRO, UCR, and JxC; LLA includes LLA and PRO (2024+)
+    const raCoalitionMap = {
+        "JxC": ["JxC", "PRO", "UCR"],
+        "LLA": ["LLA", "PRO"],
+        "PJ": ["PJ"],
+        "UCR": ["UCR"],
+        "OTROS": ["OTROS"],
+    };
+
     let filtered = (dataSource || legislatorsData).filter(l => {
         if (l.tv < 100) return false;
         if (chamberFilter && !l.c.includes(chamberFilter)) return false;
-        if (coalitionFilter && l.co !== coalitionFilter) return false;
+        if (coalitionFilter) {
+            if (prefix === "ra") {
+                // For alignment ranking, check if l.co matches any of the mapped values
+                const allowedCos = raCoalitionMap[coalitionFilter] || [coalitionFilter];
+                if (!allowedCos.includes(l.co)) return false;
+            } else {
+                // For votes ranking, exact match
+                if (l.co !== coalitionFilter) return false;
+            }
+        }
         return true;
     });
 
@@ -825,6 +853,43 @@ async function exportRankingTable(prefix, mode) {
     card.remove();
 }
 
+/**
+ * Share ranking to X (Twitter) with URL that preserves current filters
+ */
+function shareRanking(prefix) {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const params = new URLSearchParams();
+
+    // Add hash for ranking section
+    const hash = prefix === "rv" ? "#ranking-votos" : "#ranking-afinidad";
+
+    // Add ranking-specific filter parameters
+    const chamberEl = document.getElementById(`${prefix}-chamber`);
+    const coalitionEl = document.getElementById(`${prefix}-coalition`);
+    const sortEl = document.getElementById(`${prefix}-sort`);
+    const orderEl = document.getElementById(`${prefix}-order`);
+
+    if (chamberEl && chamberEl.value) params.set(`${prefix}-chamber`, chamberEl.value);
+    if (coalitionEl && coalitionEl.value) params.set(`${prefix}-coalition`, coalitionEl.value);
+    if (sortEl && sortEl.value) params.set(`${prefix}-sort`, sortEl.value);
+    if (orderEl && orderEl.value) params.set(`${prefix}-order`, orderEl.value);
+
+    // Add page size and page number
+    const pageSize = prefix === "rv" ? rvPageSize : raPageSize;
+    const page = prefix === "rv" ? rvPage : raPage;
+    params.set(`${prefix}-pagesize`, pageSize);
+    params.set(`${prefix}-page`, page);
+
+    const url = `${baseUrl}${hash}${params.toString() ? '?' + params.toString() : ''}`;
+
+    // Build share text
+    const rankingName = prefix === "rv" ? "Ranking de Votaciones" : "Ranking de Afinidad Política";
+    const text = `Mirá el ${rankingName} de legisladores en ¿Cómo Votó?`;
+
+    const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+    window.open(shareUrl, '_blank', 'width=600,height=400');
+}
+
 // ===========================================================================
 //  LEGISLATOR DETAIL
 // ===========================================================================
@@ -1037,18 +1102,18 @@ function renderLegislatorDetail(data) {
     const infoCard = document.getElementById("leg-info-card");
     const stats = data.yearly_stats || {};
     const trailingAus = data.trailing_ausente || 0;
-    const activeYears = Object.keys(stats).filter((y) => {
+    // Use ALL years (no filtering) to match ranking calculation
+    // Use same formula as Python: total_present = total_votes - total_ausente
+    let totalV = 0, totalAusente = 0;
+    for (const y of Object.keys(stats)) {
         const s = stats[y];
-        return (s.AFIRMATIVO||0)+(s.NEGATIVO||0)+(s.ABSTENCION||0)+(s.AUSENTE||0) >= 5;
-    });
-    let totalV = 0, totalPresent = 0;
-    for (const y of activeYears) {
-        const s = stats[y];
-        totalV       += (s.total || 0);
-        totalPresent += (s.AFIRMATIVO||0) + (s.NEGATIVO||0) + (s.ABSTENCION||0);
+        totalV     += (s.total || 0);
+        totalAusente += (s.AUSENTE || 0);
     }
     // Exclude trailing AUSENTE votes (post-departure absences)
     const effectiveV = totalV - trailingAus;
+    const effectiveAusente = totalAusente - trailingAus;
+    const totalPresent = effectiveV - effectiveAusente;
     const presentismoPct = effectiveV > 0 ? Math.round(totalPresent / effectiveV * 100) : null;
     document.getElementById("leg-presentismo").textContent =
         presentismoPct !== null ? presentismoPct + "\u00a0%" : "N/A";
@@ -1066,17 +1131,20 @@ function renderLegislatorDetail(data) {
         const rows = terms.map((t, idx) => {
             const period = t.yf === t.yt ? t.yf : `${t.yf}\u2013${t.yt}`;
             // Per-term presentismo: sum yearly_stats for years within [yf, yt]
-            let termV = 0, termPres = 0;
+            // Use same formula as Python: total_present = total_votes - total_ausente
+            let termV = 0, termAusente = 0;
             for (let y = t.yf; y <= t.yt; y++) {
                 const s = stats[String(y)];
                 if (!s || (s.total||0) < 1) continue;
-                termV    += (s.total || 0);
-                termPres += (s.AFIRMATIVO||0) + (s.NEGATIVO||0) + (s.ABSTENCION||0);
+                termV      += (s.total || 0);
+                termAusente += (s.AUSENTE || 0);
             }
             // For the last term, exclude trailing post-departure absences
             const termTrail = (idx === terms.length - 1) ? trailingAus : 0;
             const effTermV = termV - termTrail;
-            const tPct = effTermV > 0 ? Math.round(termPres / effTermV * 100) + "\u00a0%" : "N/A";
+            const effTermAusente = termAusente - termTrail;
+            const effTermPresent = effTermV - effTermAusente;
+            const tPct = effTermV > 0 ? Math.round(effTermPresent / effTermV * 100) + "\u00a0%" : "N/A";
             return `<tr>
                 <td><span class="badge ${chCls(t.ch)}">${chLabel(t.ch)}</span></td>
                 <td>${period}</td>
@@ -1716,17 +1784,17 @@ async function exportLegHeaderCard(btnId, mode) {
     // Compute stats for export card
     const expStats = d.yearly_stats || {};
     const expTrailingAus = d.trailing_ausente || 0;
-    const expActiveYears = Object.keys(expStats).filter(y => {
-        const s = expStats[y];
-        return (s.AFIRMATIVO||0)+(s.NEGATIVO||0)+(s.ABSTENCION||0)+(s.AUSENTE||0) >= 5;
-    });
-    let expTotalV = 0, expTotalPresent = 0;
-    for (const y of expActiveYears) {
+    // Use ALL years (no filtering) to match ranking calculation
+    // Use same formula as Python: total_present = total_votes - total_ausente
+    let expTotalV = 0, expTotalAusente = 0;
+    for (const y of Object.keys(expStats)) {
         const s = expStats[y];
         expTotalV       += (s.total || 0);
-        expTotalPresent += (s.AFIRMATIVO||0) + (s.NEGATIVO||0) + (s.ABSTENCION||0);
+        expTotalAusente += (s.AUSENTE || 0);
     }
     const expEffV = expTotalV - expTrailingAus;
+    const expEffAusente = expTotalAusente - expTrailingAus;
+    const expTotalPresent = expEffV - expEffAusente;
     const expPresText   = expEffV > 0 ? Math.round(expTotalPresent / expEffV * 100) + "\u00a0%" : "N/A";
     const expTermsCount = (d.terms || []).length;
 
@@ -2454,7 +2522,25 @@ function parseArgDate(dateStr) {
         const chamberEl = document.getElementById(prefix + "-chamber");
         const coalitionEl = document.getElementById(prefix + "-coalition");
         const pagesizeEl = document.getElementById(prefix + "-pagesize");
-        function onChange() { setPage(1); renderFn(); }
+
+        function updateUrl() {
+            // Build URL with hash and query params
+            const hash = prefix === "rv" ? "#ranking-votos" : "#ranking-afinidad";
+            const params = new URLSearchParams();
+            
+            // Update filter params
+            if (chamberEl?.value) params.set(`${prefix}-chamber`, chamberEl.value);
+            if (coalitionEl?.value) params.set(`${prefix}-coalition`, coalitionEl.value);
+            if (sortEl?.value) params.set(`${prefix}-sort`, sortEl.value);
+            if (orderEl?.value) params.set(`${prefix}-order`, orderEl.value);
+            params.set(`${prefix}-pagesize`, getPageSize());
+            params.set(`${prefix}-page`, getPage());
+
+            const url = `${window.location.origin}${window.location.pathname}${hash}${params.toString() ? '?' + params.toString() : ''}`;
+            window.history.pushState({}, "", url);
+        }
+
+        function onChange() { setPage(1); renderFn(); updateUrl(); }
         if (sortEl) sortEl.addEventListener("change", () => { setSort(sortEl.value); onChange(); });
         if (orderEl) orderEl.addEventListener("change", () => { setAsc(orderEl.value === "asc"); onChange(); });
         if (chamberEl) chamberEl.addEventListener("change", onChange);
@@ -2475,6 +2561,7 @@ function parseArgDate(dateStr) {
                 }
                 setPage(1);
                 renderFn();
+                updateUrl();
             });
         });
         renderFn();
@@ -2491,8 +2578,103 @@ function parseArgDate(dateStr) {
     // Wire ranking export buttons
     document.getElementById("btn-copy-rv")?.addEventListener("click", () => exportRankingTable("rv", "copy"));
     document.getElementById("btn-download-rv")?.addEventListener("click", () => exportRankingTable("rv", "download"));
+    document.getElementById("btn-share-rv")?.addEventListener("click", () => shareRanking("rv"));
     document.getElementById("btn-copy-ra")?.addEventListener("click", () => exportRankingTable("ra", "copy"));
     document.getElementById("btn-download-ra")?.addEventListener("click", () => exportRankingTable("ra", "download"));
+    document.getElementById("btn-share-ra")?.addEventListener("click", () => shareRanking("ra"));
+
+    // Handle URL hash and parameters for rankings
+    function applyRankingFiltersFromUrl() {
+        // Parse hash which may contain both section and query params
+        // e.g., #ranking-afinidad?ra-coalition=JxC&ra-sort=vpj
+        let hash = window.location.hash;
+        let params = new URLSearchParams(window.location.search);
+        
+        // If there are params in the hash, parse them
+        if (hash && hash.includes('?')) {
+            const hashParts = hash.split('?');
+            const hashSection = hashParts[0];
+            const hashQueryString = hashParts.slice(1).join('?');
+            params = new URLSearchParams(hashQueryString);
+            hash = hashSection;
+        }
+
+        // Apply filters for Ranking Votos
+        function applyFilters(prefix, sortSetter, ascSetter, pageSetter, renderFn) {
+            const chamberEl = document.getElementById(`${prefix}-chamber`);
+            const coalitionEl = document.getElementById(`${prefix}-coalition`);
+            const sortEl = document.getElementById(`${prefix}-sort`);
+            const orderEl = document.getElementById(`${prefix}-order`);
+            const pagesizeEl = document.getElementById(`${prefix}-pagesize`);
+
+            let changed = false;
+            if (chamberEl && params.has(`${prefix}-chamber`)) {
+                chamberEl.value = params.get(`${prefix}-chamber`);
+                changed = true;
+            }
+            if (coalitionEl && params.has(`${prefix}-coalition`)) {
+                coalitionEl.value = params.get(`${prefix}-coalition`);
+                changed = true;
+            }
+            if (sortEl && params.has(`${prefix}-sort`)) {
+                const sortVal = params.get(`${prefix}-sort`);
+                sortSetter(sortVal);
+                sortEl.value = sortVal;
+                changed = true;
+            }
+            if (orderEl && params.has(`${prefix}-order`)) {
+                const orderVal = params.get(`${prefix}-order`);
+                ascSetter(orderVal === "asc");
+                orderEl.value = orderVal;
+                changed = true;
+            }
+            if (pagesizeEl && params.has(`${prefix}-pagesize`)) {
+                const size = parseInt(params.get(`${prefix}-pagesize`), 10);
+                if ([5, 10, 25, 50].includes(size)) {
+                    if (prefix === "rv") rvPageSize = size; else raPageSize = size;
+                    pagesizeEl.value = size;
+                    changed = true;
+                }
+            }
+            // Apply page number
+            if (params.has(`${prefix}-page`)) {
+                const pageNum = parseInt(params.get(`${prefix}-page`), 10);
+                if (pageNum >= 1) {
+                    pageSetter(pageNum);
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                renderFn();
+            }
+        }
+
+        applyFilters("rv",
+            v => { rvSortCol = v; },
+            v => { rvSortAsc = v; },
+            v => { rvPage = v; },
+            renderRankingVotes
+        );
+        applyFilters("ra",
+            v => { raSortCol = v; },
+            v => { raSortAsc = v; },
+            v => { raPage = v; },
+            renderRankingAlignment
+        );
+
+        // Scroll to ranking section after filters are applied
+        setTimeout(() => {
+            if (hash === "#ranking-votos") {
+                document.getElementById("ranking-votos")?.scrollIntoView({ behavior: "smooth" });
+            } else if (hash === "#ranking-afinidad") {
+                document.getElementById("ranking-afinidad")?.scrollIntoView({ behavior: "smooth" });
+            }
+        }, 50);
+    }
+    
+    // Apply URL filters after rankings are initialized
+    applyRankingFiltersFromUrl();
 
     // Wire votes table filters (were missing)
     const votesYearFilter = document.getElementById("votes-year-filter");
