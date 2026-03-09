@@ -64,13 +64,13 @@ pip install -r requirements.txt
 
 ```bash
 # Scrape ambas cámaras
-python scraper.py
+python tools/scraper.py
 
 # Solo Diputados
-python scraper.py diputados
+python tools/scraper.py diputados
 
 # Solo Senadores
-python scraper.py senadores
+python tools/scraper.py senadores
 ```
 
 El scraper **no vuelve a descargar** votaciones que ya están en `data/`. Solo descarga las nuevas.
@@ -78,7 +78,7 @@ El scraper **no vuelve a descargar** votaciones que ya están en `data/`. Solo d
 ### Generar el sitio
 
 ```bash
-python generate_site.py
+python tools/generate_site.py
 ```
 
 Esto genera los archivos JSON en `docs/data/` que son consumidos por el frontend.

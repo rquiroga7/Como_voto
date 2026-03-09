@@ -35,7 +35,7 @@ from bs4 import BeautifulSoup
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 FOTOS_DIR = BASE_DIR / "docs" / "fotos"
 

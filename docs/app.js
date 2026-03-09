@@ -585,6 +585,247 @@ document.addEventListener("click", function (e) {
 });
 
 // ===========================================================================
+//  RANKING SECTION
+// ===========================================================================
+
+// Ranking 1: Votes
+let rvPage = 1, rvPageSize = 5, rvSortCol = "tv", rvSortAsc = false;
+// Ranking 2: Alignment
+let raPage = 1, raPageSize = 5, raSortCol = "vpj", raSortAsc = false;
+
+function renderRankingTable(prefix, sortCol, asc, columns, cellRenderer, dataSource) {
+    const chamberFilter = document.getElementById(prefix + "-chamber")?.value || "";
+    const coalitionFilter = document.getElementById(prefix + "-coalition")?.value || "";
+    const pageSize = prefix === "rv" ? rvPageSize : raPageSize;
+    let page_ref = prefix === "rv" ? { get: () => rvPage, set: v => { rvPage = v; } }
+                                    : { get: () => raPage, set: v => { raPage = v; } };
+
+    let filtered = (dataSource || legislatorsData).filter(l => {
+        if (l.tv < 100) return false;
+        if (chamberFilter && !l.c.includes(chamberFilter)) return false;
+        if (coalitionFilter && l.co !== coalitionFilter) return false;
+        return true;
+    });
+
+    filtered.sort((a, b) => {
+        let va = a[sortCol], vb = b[sortCol];
+        if (va === null || va === undefined) va = -Infinity;
+        if (vb === null || vb === undefined) vb = -Infinity;
+        return asc ? va - vb : vb - va;
+    });
+
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    if (page_ref.get() > totalPages) page_ref.set(totalPages);
+
+    const start = (page_ref.get() - 1) * pageSize;
+    const pageData = filtered.slice(start, start + pageSize);
+
+    // Pre-compute competition ranks (ties share the same rank)
+    const ranks = [];
+    for (let i = 0; i < filtered.length; i++) {
+        if (i === 0) { ranks.push(1); continue; }
+        const cur = filtered[i][sortCol] ?? -Infinity;
+        const prev = filtered[i - 1][sortCol] ?? -Infinity;
+        ranks.push(cur === prev ? ranks[i - 1] : i + 1);
+    }
+
+    const tbody = document.getElementById(prefix + "-tbody");
+    const medals = {
+        1: '<span class="ranking-medal ranking-medal-gold" title="#1">🥇</span>',
+        2: '<span class="ranking-medal ranking-medal-silver" title="#2">🥈</span>',
+        3: '<span class="ranking-medal ranking-medal-bronze" title="#3">🥉</span>',
+    };
+    tbody.innerHTML = pageData.map((l, i) => {
+        const rank = ranks[start + i];
+        const medal = medals[rank] || '';
+        return `<tr>
+            <td>${rank} ${medal}</td>
+            <td><a class="ranking-name-link" data-key="${escapeAttr(l.k)}">${escapeHtml(l.n)}</a></td>
+            <td class="ranking-cell-bloc">${escapeHtml(l.b)}</td>
+            ${cellRenderer(l)}
+        </tr>`;
+    }).join("");
+
+    tbody.querySelectorAll(".ranking-name-link").forEach(el => {
+        el.addEventListener("click", (e) => {
+            e.preventDefault();
+            loadLegislatorDetail(el.dataset.key);
+        });
+    });
+
+    // Update sort column highlight
+    const table = document.getElementById(prefix + "-table");
+    table.querySelectorAll(".ranking-sortable").forEach(th => {
+        th.classList.toggle("sort-active", th.dataset.col === sortCol);
+        const arrow = asc ? " ▲" : " ▼";
+        th.textContent = th.textContent.replace(/ [▲▼]$/, "");
+        if (th.dataset.col === sortCol) th.textContent += arrow;
+    });
+
+    // Pagination
+    const pagEl = document.getElementById(prefix + "-pagination");
+    if (totalPages <= 1) { pagEl.innerHTML = ""; return; }
+    let html = "";
+    const curPage = page_ref.get();
+    if (curPage > 1) html += `<button data-p="${curPage - 1}">‹</button>`;
+    const maxBtns = 7;
+    let pStart = Math.max(1, curPage - Math.floor(maxBtns / 2));
+    let pEnd = Math.min(totalPages, pStart + maxBtns - 1);
+    if (pEnd - pStart < maxBtns - 1) pStart = Math.max(1, pEnd - maxBtns + 1);
+    for (let p = pStart; p <= pEnd; p++) {
+        html += `<button data-p="${p}" class="${p === curPage ? "active" : ""}">${p}</button>`;
+    }
+    if (curPage < totalPages) html += `<button data-p="${curPage + 1}">›</button>`;
+    pagEl.innerHTML = html;
+    pagEl.querySelectorAll("button[data-p]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            page_ref.set(parseInt(btn.dataset.p, 10));
+            if (prefix === "rv") renderRankingVotes();
+            else renderRankingAlignment();
+        });
+    });
+}
+
+function renderRankingVotes() {
+    const fmt = v => v !== null && v !== undefined ? v : "–";
+    const fmtPct = v => v !== null && v !== undefined ? v + "%" : "–";
+    renderRankingTable("rv", rvSortCol, rvSortAsc,
+        ["tv", "pres", "aus"],
+        l => `<td class="ranking-cell-num">${fmt(l.tv)}</td>
+              <td class="ranking-cell-num">${fmtPct(l.pres)}</td>
+              <td class="ranking-cell-num">${fmt(l.aus)}</td>`
+    );
+}
+
+const COALITION_LABELS = { PJ: "PJ / UxP", UCR: "UCR / ARI", PRO: "JxC / PRO / UCR", LLA: "LLA / PRO", OTROS: "Otros" };
+
+function renderRankingAlignment() {
+    const fmt = v => v !== null && v !== undefined ? v : "–";
+    // Build mandato-level rows: one row per legislator × coalition in by_co
+    const expanded = [];
+    for (const l of legislatorsData) {
+        const byCo = l.by_co;
+        if (!byCo) continue;
+        for (const [co, vals] of Object.entries(byCo)) {
+            expanded.push({
+                k: l.k,
+                n: l.n,
+                c: l.c,
+                p: l.p,
+                b: vals.b || l.b,
+                co: co,
+                vpj: vals.vpj,
+                vucr: vals.vucr,
+                vpro: vals.vpro,
+                vlla: vals.vlla,
+                tv: vals.tv,
+            });
+        }
+    }
+    renderRankingTable("ra", raSortCol, raSortAsc,
+        ["vpj", "vucr", "vpro", "vlla"],
+        l => `<td class="ranking-cell-num">${fmt(l.vpj)}</td>
+              <td class="ranking-cell-num">${fmt(l.vucr)}</td>
+              <td class="ranking-cell-num">${fmt(l.vpro)}</td>
+              <td class="ranking-cell-num">${fmt(l.vlla)}</td>`,
+        expanded
+    );
+}
+
+// Column label maps for export titles
+const RANKING_COL_LABELS = {
+    tv: "Total de Votaciones", pres: "Presentismo", aus: "Ausencias", abst: "Abstenciones",
+    vpj: "Votos con PJ", vucr: "Votos con UCR", vpro: "Votos con PRO", vlla: "Votos con LLA",
+};
+
+function buildRankingExportTitle(prefix) {
+    const sortCol = prefix === "rv" ? rvSortCol : raSortCol;
+    const asc = prefix === "rv" ? rvSortAsc : raSortAsc;
+    const colLabel = RANKING_COL_LABELS[sortCol] || sortCol;
+    const dir = asc ? "(menor a mayor)" : "(mayor a menor)";
+    const chamberEl = document.getElementById(prefix + "-chamber");
+    const coalEl = document.getElementById(prefix + "-coalition");
+    const chamber = chamberEl?.selectedOptions[0]?.textContent || "";
+    const coal = coalEl?.selectedOptions[0]?.textContent || "";
+    let subtitle = "";
+    if (chamberEl?.value) subtitle += chamber;
+    if (coalEl?.value) {
+        if (prefix === "ra") {
+            // Second ranking: add "Votados/as por una lista de la coalición..." prefix
+            subtitle += (subtitle ? " · " : "") + `Votados/as por una lista de la coalición ${coal}`;
+        } else {
+            subtitle += (subtitle ? " · " : "") + coal;
+        }
+    }
+    return {
+        title: `Ranking por ${colLabel} ${dir}`,
+        subtitle: subtitle || "Todos los legisladores",
+    };
+}
+
+async function exportRankingTable(prefix, mode) {
+    const table = document.getElementById(prefix + "-table");
+    if (!table) return;
+    const { title, subtitle } = buildRankingExportTitle(prefix);
+
+    // Build off-screen card — same size/scale as other exports (360px × scale 3 = 1080px output)
+    const card = document.createElement("div");
+    card.style.cssText = "position:absolute;left:-9999px;top:0;background:#fff;padding:20px;width:520px;font-family:Inter,system-ui,sans-serif;";
+
+    // Header
+    const header = document.createElement("div");
+    header.style.cssText = "text-align:center;margin-bottom:12px;";
+    header.innerHTML = `<div style="font-size:18px;font-weight:700;color:#1e293b;">${escapeHtml(title)}</div>
+        <div style="font-size:12px;color:#64748b;margin-top:3px;">${escapeHtml(subtitle)}</div>`;
+    card.appendChild(header);
+
+    // Clone table and limit to 5 rows
+    const clonedTable = table.cloneNode(true);
+    // auto layout so browser sizes data columns to fit header text
+    clonedTable.style.cssText = "width:100%;font-size:11px;table-layout:auto;border-collapse:collapse;";
+
+    const ths = clonedTable.querySelectorAll("thead th");
+    // Constrain # and Bloque; let Legislador and data cols auto-size
+    if (ths[0]) ths[0].style.width = "40px";
+    if (ths[2]) { ths[2].style.maxWidth = "72px"; ths[2].style.width = "72px"; }
+
+    clonedTable.querySelectorAll("th, td").forEach(cell => {
+        cell.style.padding = "6px 4px";
+        cell.style.whiteSpace = "normal";
+        cell.style.wordBreak = "break-word";
+        cell.style.overflow = "hidden";
+        cell.style.maxWidth = "";
+    });
+    // Header cells don't wrap so each data column is at least as wide as its title
+    clonedTable.querySelectorAll("th").forEach(th => { th.style.whiteSpace = "nowrap"; th.style.position = "static"; });
+    // Keep legislator name (2nd column) at full size
+    clonedTable.querySelectorAll("td:nth-child(2)").forEach(cell => { cell.style.fontSize = "13px"; });
+    // Bloque column (3rd) smaller
+    clonedTable.querySelectorAll("td:nth-child(3), th:nth-child(3)").forEach(cell => { cell.style.fontSize = "9px"; });
+    const rows = clonedTable.querySelectorAll("tbody tr");
+    const curPageSize = prefix === "rv" ? rvPageSize : raPageSize;
+    const exportLimit = curPageSize <= 10 ? curPageSize : 10;
+    for (let i = exportLimit; i < rows.length; i++) rows[i].remove();
+    card.appendChild(clonedTable);
+
+    const footer = document.createElement("div");
+    footer.style.cssText = "display:flex;justify-content:space-between;margin-top:10px;font-size:11px;color:#94a3b8;";
+    footer.innerHTML = `<span>${new Date().toLocaleDateString("es-AR")}</span><span>comovoto.dev.ar</span>`;
+    card.appendChild(footer);
+
+    document.body.appendChild(card);
+
+    const btnId = mode === "copy" ? `btn-copy-${prefix}` : `btn-download-${prefix}`;
+    const btn = document.getElementById(btnId);
+    const originalText = btn.innerHTML;
+    const filename = `ranking_${prefix === "rv" ? "votos" : "afinidad"}.png`;
+
+    await captureAndExport({ card, btn, originalText, filename, mode, scale: 3 });
+    card.remove();
+}
+
+// ===========================================================================
 //  LEGISLATOR DETAIL
 // ===========================================================================
 
@@ -612,6 +853,7 @@ async function loadLegislatorDetail(nameKey, urlParams) {
     document.querySelector(".search-section").classList.add("hidden");
     document.getElementById("stats-bar").classList.add("hidden");
     document.getElementById("law-search-section").classList.add("hidden");
+    document.getElementById("ranking-section").classList.add("hidden");
 
     // Show loading state
     document.getElementById("leg-name").textContent = "Cargando...";
@@ -794,6 +1036,7 @@ function renderLegislatorDetail(data) {
     // Presentismo + terms info card
     const infoCard = document.getElementById("leg-info-card");
     const stats = data.yearly_stats || {};
+    const trailingAus = data.trailing_ausente || 0;
     const activeYears = Object.keys(stats).filter((y) => {
         const s = stats[y];
         return (s.AFIRMATIVO||0)+(s.NEGATIVO||0)+(s.ABSTENCION||0)+(s.AUSENTE||0) >= 5;
@@ -804,7 +1047,9 @@ function renderLegislatorDetail(data) {
         totalV       += (s.total || 0);
         totalPresent += (s.AFIRMATIVO||0) + (s.NEGATIVO||0) + (s.ABSTENCION||0);
     }
-    const presentismoPct = totalV > 0 ? Math.round(totalPresent / totalV * 100) : null;
+    // Exclude trailing AUSENTE votes (post-departure absences)
+    const effectiveV = totalV - trailingAus;
+    const presentismoPct = effectiveV > 0 ? Math.round(totalPresent / effectiveV * 100) : null;
     document.getElementById("leg-presentismo").textContent =
         presentismoPct !== null ? presentismoPct + "\u00a0%" : "N/A";
 
@@ -818,7 +1063,7 @@ function renderLegislatorDetail(data) {
     if (terms.length > 0) {
         const chLabel = (ch) => ch === "diputados" ? "Diputado/a" : "Senador/a";
         const chCls   = (ch) => ch === "diputados" ? "badge-diputados" : "badge-senadores";
-        const rows = terms.map((t) => {
+        const rows = terms.map((t, idx) => {
             const period = t.yf === t.yt ? t.yf : `${t.yf}\u2013${t.yt}`;
             // Per-term presentismo: sum yearly_stats for years within [yf, yt]
             let termV = 0, termPres = 0;
@@ -828,7 +1073,10 @@ function renderLegislatorDetail(data) {
                 termV    += (s.total || 0);
                 termPres += (s.AFIRMATIVO||0) + (s.NEGATIVO||0) + (s.ABSTENCION||0);
             }
-            const tPct = termV > 0 ? Math.round(termPres / termV * 100) + "\u00a0%" : "N/A";
+            // For the last term, exclude trailing post-departure absences
+            const termTrail = (idx === terms.length - 1) ? trailingAus : 0;
+            const effTermV = termV - termTrail;
+            const tPct = effTermV > 0 ? Math.round(termPres / effTermV * 100) + "\u00a0%" : "N/A";
             return `<tr>
                 <td><span class="badge ${chCls(t.ch)}">${chLabel(t.ch)}</span></td>
                 <td>${period}</td>
@@ -903,6 +1151,7 @@ function showSearchView() {
     document.querySelector(".search-section").classList.remove("hidden");
     document.getElementById("stats-bar").classList.remove("hidden");
     document.getElementById("law-search-section").classList.remove("hidden");
+    document.getElementById("ranking-section").classList.remove("hidden");
 
     // Clear deep-link params from URL without reload
     if (window.location.search) {
@@ -1137,7 +1386,7 @@ function populateExportHeader(headerEl, d) {
  * @param {'copy'|'download'} opts.mode
  * @param {HTMLElement} [opts.photoContainer] – element containing img.aec-photo to wait for
  */
-async function captureAndExport({ card, btn, originalText, filename, mode, photoContainer }) {
+async function captureAndExport({ card, btn, originalText, filename, mode, photoContainer, scale = 3 }) {
     btn.innerHTML = "⏳ Generando...";
     btn.disabled  = true;
 
@@ -1158,7 +1407,7 @@ async function captureAndExport({ card, btn, originalText, filename, mode, photo
             await new Promise((res) => { photoImg.onload = res; photoImg.onerror = res; });
         }
         const canvas = await html2canvas(card, {
-            backgroundColor: "#ffffff", scale: 3, useCORS: true, logging: false,
+            backgroundColor: "#ffffff", scale, useCORS: true, logging: false,
         });
         const blob = await new Promise((res, rej) =>
             canvas.toBlob((b) => (b ? res(b) : rej(new Error("toBlob failed"))), "image/png"));
@@ -1171,13 +1420,8 @@ async function captureAndExport({ card, btn, originalText, filename, mode, photo
                 await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
                 btn.innerHTML = "✓ Copiado!";
             } catch (e) {
-                if (mobile) {
-                    triggerDl(blob);
-                    btn.innerHTML = "✓ Descargado!";
-                } else {
-                    console.error("Clipboard write failed:", e);
-                    btn.innerHTML = "Error al copiar";
-                }
+                console.error("Clipboard write failed:", e);
+                btn.innerHTML = "No se pudo copiar";
             }
         }
         setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 2000);
@@ -1471,6 +1715,7 @@ async function exportLegHeaderCard(btnId, mode) {
 
     // Compute stats for export card
     const expStats = d.yearly_stats || {};
+    const expTrailingAus = d.trailing_ausente || 0;
     const expActiveYears = Object.keys(expStats).filter(y => {
         const s = expStats[y];
         return (s.AFIRMATIVO||0)+(s.NEGATIVO||0)+(s.ABSTENCION||0)+(s.AUSENTE||0) >= 5;
@@ -1481,7 +1726,8 @@ async function exportLegHeaderCard(btnId, mode) {
         expTotalV       += (s.total || 0);
         expTotalPresent += (s.AFIRMATIVO||0) + (s.NEGATIVO||0) + (s.ABSTENCION||0);
     }
-    const expPresText   = expTotalV > 0 ? Math.round(expTotalPresent / expTotalV * 100) + "\u00a0%" : "N/A";
+    const expEffV = expTotalV - expTrailingAus;
+    const expPresText   = expEffV > 0 ? Math.round(expTotalPresent / expEffV * 100) + "\u00a0%" : "N/A";
     const expTermsCount = (d.terms || []).length;
 
     innerEl.innerHTML = `
@@ -2200,6 +2446,53 @@ function parseArgDate(dateStr) {
     // Wire province filter (was missing)
     const provinceSel = document.getElementById("filter-province");
     if (provinceSel) provinceSel.addEventListener("change", onSearchInput);
+
+    // Wire ranking controls
+    function wireRanking(prefix, getSort, setSort, getAsc, setAsc, getPageSize, setPageSize, getPage, setPage, renderFn) {
+        const sortEl = document.getElementById(prefix + "-sort");
+        const orderEl = document.getElementById(prefix + "-order");
+        const chamberEl = document.getElementById(prefix + "-chamber");
+        const coalitionEl = document.getElementById(prefix + "-coalition");
+        const pagesizeEl = document.getElementById(prefix + "-pagesize");
+        function onChange() { setPage(1); renderFn(); }
+        if (sortEl) sortEl.addEventListener("change", () => { setSort(sortEl.value); onChange(); });
+        if (orderEl) orderEl.addEventListener("change", () => { setAsc(orderEl.value === "asc"); onChange(); });
+        if (chamberEl) chamberEl.addEventListener("change", onChange);
+        if (coalitionEl) coalitionEl.addEventListener("change", onChange);
+        if (pagesizeEl) pagesizeEl.addEventListener("change", () => { setPageSize(parseInt(pagesizeEl.value, 10)); onChange(); });
+        const table = document.getElementById(prefix + "-table");
+        if (table) table.querySelectorAll(".ranking-sortable").forEach(th => {
+            th.addEventListener("click", () => {
+                const col = th.dataset.col;
+                if (getSort() === col) {
+                    setAsc(!getAsc());
+                    if (orderEl) orderEl.value = getAsc() ? "asc" : "desc";
+                } else {
+                    setSort(col);
+                    setAsc(false);
+                    if (sortEl) sortEl.value = col;
+                    if (orderEl) orderEl.value = "desc";
+                }
+                setPage(1);
+                renderFn();
+            });
+        });
+        renderFn();
+    }
+    wireRanking("rv",
+        () => rvSortCol, v => { rvSortCol = v; }, () => rvSortAsc, v => { rvSortAsc = v; },
+        () => rvPageSize, v => { rvPageSize = v; }, () => rvPage, v => { rvPage = v; },
+        renderRankingVotes);
+    wireRanking("ra",
+        () => raSortCol, v => { raSortCol = v; }, () => raSortAsc, v => { raSortAsc = v; },
+        () => raPageSize, v => { raPageSize = v; }, () => raPage, v => { raPage = v; },
+        renderRankingAlignment);
+
+    // Wire ranking export buttons
+    document.getElementById("btn-copy-rv")?.addEventListener("click", () => exportRankingTable("rv", "copy"));
+    document.getElementById("btn-download-rv")?.addEventListener("click", () => exportRankingTable("rv", "download"));
+    document.getElementById("btn-copy-ra")?.addEventListener("click", () => exportRankingTable("ra", "copy"));
+    document.getElementById("btn-download-ra")?.addEventListener("click", () => exportRankingTable("ra", "download"));
 
     // Wire votes table filters (were missing)
     const votesYearFilter = document.getElementById("votes-year-filter");

@@ -4,7 +4,7 @@
 
 :root {
     /* Colors */
-    --color-bg: #f8f9fa;
+    --color-bg: #e9ecef;
     --color-surface: #ffffff;
     --color-text: #1a1a2e;
     --color-text-secondary: #6b7280;
@@ -325,6 +325,119 @@ body {
     font-size: 0.8rem;
     color: var(--color-text-secondary);
     font-weight: 500;
+}
+
+/* ====== RANKING SECTION ====== */
+.ranking-section {
+    padding: 2rem 0;
+}
+
+.ranking-controls {
+    max-width: 900px;
+    margin: 0 auto 1.5rem;
+}
+
+.ranking-controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+}
+
+.ranking-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.ranking-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.ranking-table th {
+    background: var(--color-surface);
+    padding: 0.6rem 0.5rem;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid var(--color-border);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.ranking-table td {
+    padding: 0.5rem 0.5rem;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+}
+
+.ranking-table td.ranking-cell-bloc {
+    max-width: 180px;
+    white-space: normal;
+    word-wrap: break-word;
+    font-size: 0.8rem;
+}
+
+.ranking-table tr:hover {
+    background: rgba(99, 102, 241, 0.04);
+}
+
+.ranking-table .ranking-sortable {
+    cursor: pointer;
+    user-select: none;
+    text-align: right;
+}
+
+.ranking-table .ranking-sortable:hover {
+    color: var(--color-primary);
+}
+
+.ranking-table .ranking-sortable.sort-active {
+    color: var(--color-primary);
+    font-weight: 700;
+}
+
+.ranking-name-link {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.ranking-name-link:hover {
+    text-decoration: underline;
+}
+
+.ranking-cell-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.ranking-sortable {
+    text-align: right;
+}
+
+.ranking-medal {
+    font-size: 1rem;
+    vertical-align: middle;
+}
+
+.ranking-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.ranking-title-row .section-title { margin-bottom: 0; }
+.ranking-title-row .section-desc { margin-bottom: 0; }
+
+.ranking-export-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
 }
 
 /* ====== LEGISLATOR DETAIL ====== */
@@ -1873,6 +1986,19 @@ body {
 
     .logo-icon {
         font-size: 1.75rem;
+    }
+
+    .ranking-controls-row {
+        flex-direction: column;
+    }
+
+    .ranking-table {
+        font-size: 0.75rem;
+    }
+
+    .ranking-table th,
+    .ranking-table td {
+        padding: 0.4rem 0.3rem;
     }
 
     .charts-row {

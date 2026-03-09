@@ -2,8 +2,8 @@ name: Update Data & Deploy
 
 on:
   schedule:
-    # Run every Monday and Thursday at 06:00 UTC
-    - cron: '0 6 * * 1,4'
+    # Run every day at 07:00 UTC (04:00 GMT-3)
+    - cron: '0 7 * * *'
   workflow_dispatch:  # Allow manual runs
 
 permissions:
@@ -28,11 +28,11 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run scraper
-        run: python scraper.py
+        run: python tools/scraper.py
         timeout-minutes: 120
 
       - name: Generate site data
-        run: python generate_site.py
+        run: python tools/generate_site.py
 
       - name: Commit updated data
         run: |
