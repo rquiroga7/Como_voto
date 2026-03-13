@@ -264,6 +264,14 @@
                         </select>
                     </div>
                     <div class="filter-group">
+                        <label for="rv-activity">Actividad</label>
+                        <select id="rv-activity">
+                            <option value="">Todos</option>
+                            <option value="activos">Activos (últimos 4 años)</option>
+                            <option value="inactivos">Inactivos</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
                         <label for="rv-pagesize">Mostrar</label>
                         <select id="rv-pagesize">
                             <option value="5">5</option>
@@ -349,6 +357,14 @@
                             <option value="">Todas</option>
                             <option value="diputados">Diputados</option>
                             <option value="senadores">Senadores</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="ra-activity">Actividad</label>
+                        <select id="ra-activity">
+                            <option value="">Todos</option>
+                            <option value="activos">Activos (últimos 4 años)</option>
+                            <option value="inactivos">Inactivos</option>
                         </select>
                     </div>
                     <div class="filter-group">
@@ -586,6 +602,13 @@
                         <option value="NEGATIVO">Negativo</option>
                         <option value="ABSTENCION">Abstención</option>
                         <option value="AUSENTE">Ausente</option>
+                    </select>
+                    <select id="votes-coalition-filter" class="votes-coalition-select">
+                        <option value="">Todas las coaliciones</option>
+                        <option value="PJ">Alineado con PJ</option>
+                        <option value="UCR">Alineado con UCR</option>
+                        <option value="JxC">Alineado con JxC</option>
+                        <option value="LLA">Alineado con LLA</option>
                     </select>
                     <input type="text" id="votes-law-filter" placeholder="Filtrar por ley..." class="votes-law-input">
                 </div>

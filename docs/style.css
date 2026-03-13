@@ -1312,6 +1312,11 @@ body {
     border-color: var(--color-primary);
 }
 
+/* Coalition alignment filter - slightly wider for better readability */
+.votes-coalition-select {
+    min-width: 200px;
+}
+
 .votes-table-wrapper {
     overflow-x: auto;
 }

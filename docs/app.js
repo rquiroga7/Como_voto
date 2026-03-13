@@ -616,9 +616,14 @@ let raPage = 1, raPageSize = 5, raSortCol = "vpj", raSortAsc = false;
 function renderRankingTable(prefix, sortCol, asc, columns, cellRenderer, dataSource) {
     const chamberFilter = document.getElementById(prefix + "-chamber")?.value || "";
     const coalitionFilter = document.getElementById(prefix + "-coalition")?.value || "";
+    const activityFilter = (document.getElementById(prefix + "-activity")?.value || "");
     const pageSize = prefix === "rv" ? rvPageSize : raPageSize;
     let page_ref = prefix === "rv" ? { get: () => rvPage, set: v => { rvPage = v; } }
                                     : { get: () => raPage, set: v => { raPage = v; } };
+
+    // Calculate current year for activity filter (default to 2026 if Date fails)
+    const currentYear = new Date().getFullYear() || 2026;
+    const activityThreshold = currentYear - 4;
 
     // For the alignment ranking (ra), map grouped coalition filters to actual co_electoral values
     // JxC includes PRO and JxC (2015-2023 Cambiemos/Juntos por el Cambio era)
@@ -641,7 +646,7 @@ function renderRankingTable(prefix, sortCol, asc, columns, cellRenderer, dataSou
                 // For alignment ranking, check if l.co matches any of the mapped values
                 const allowedCos = raCoalitionMap[coalitionFilter] || [coalitionFilter];
                 if (!allowedCos.includes(l.co)) return false;
-                
+
                 // Special handling for UCR filter: only show mandates up to 2013
                 if (coalitionFilter === "UCR" && l.by_co) {
                     const ucrData = l.by_co["UCR"];
@@ -649,7 +654,7 @@ function renderRankingTable(prefix, sortCol, asc, columns, cellRenderer, dataSou
                         return false;  // Skip UCR mandates starting 2014+
                     }
                 }
-                
+
                 // Special handling for OTROS filter: exclude UCR mandates (they have their own filter)
                 if (coalitionFilter === "OTROS" && l.by_co && l.by_co["UCR"]) {
                     // Keep only if the mandate is not UCR
@@ -661,6 +666,36 @@ function renderRankingTable(prefix, sortCol, asc, columns, cellRenderer, dataSou
                 if (l.co !== coalitionFilter) return false;
             }
         }
+
+        // Activity filter for both rankings (non-mobile only)
+        if (activityFilter) {
+            // Check if legislator was active in the last 4 years
+            // For expanded data (renderRankingAlignment), use yf/yt directly
+            // For regular data (renderRankingVotes), use by_co
+            let maxYear = 0;
+            
+            // Check direct yf/yt fields (from expanded data in renderRankingAlignment)
+            if (l.yf && l.yf > maxYear) maxYear = l.yf;
+            if (l.yt && l.yt > maxYear) maxYear = l.yt;
+            
+            // Also check by_co if available (original legislatorsData)
+            if (l.by_co) {
+                for (const coData of Object.values(l.by_co)) {
+                    if (coData.yt && coData.yt > maxYear) {
+                        maxYear = coData.yt;
+                    }
+                    if (coData.yf && coData.yf > maxYear) {
+                        maxYear = coData.yf;
+                    }
+                }
+            }
+            
+            const isActive = maxYear >= activityThreshold;
+
+            if (activityFilter === "activos" && !isActive) return false;
+            if (activityFilter === "inactivos" && isActive) return false;
+        }
+
         return true;
     });
 
@@ -809,8 +844,10 @@ function buildRankingExportTitle(prefix) {
     const dir = asc ? "(menor a mayor)" : "(mayor a menor)";
     const chamberEl = document.getElementById(prefix + "-chamber");
     const coalEl = document.getElementById(prefix + "-coalition");
+    const activityEl = document.getElementById(prefix + "-activity");
     const chamber = chamberEl?.selectedOptions[0]?.textContent || "";
     const coal = coalEl?.selectedOptions[0]?.textContent || "";
+    const activity = activityEl?.selectedOptions[0]?.textContent || "";
     let subtitle = "";
     if (chamberEl?.value) subtitle += chamber;
     if (coalEl?.value) {
@@ -820,6 +857,11 @@ function buildRankingExportTitle(prefix) {
         } else {
             subtitle += (subtitle ? " · " : "") + coal;
         }
+    }
+    // Add activity filter if applied
+    if (activityEl?.value) {
+        const activityLabel = activity === "Activos (últimos 4 años)" ? "Activos" : activity;
+        subtitle += (subtitle ? " · " : "") + activityLabel;
     }
     return {
         title: `Ranking por ${colLabel} ${dir}`,
@@ -2187,6 +2229,7 @@ function renderVotesTable() {
 
     const yearFilter = document.getElementById("votes-year-filter").value;
     const typeFilter = document.getElementById("votes-type-filter").value;
+    const coalitionFilter = document.getElementById("votes-coalition-filter")?.value || "";
     const lawFilter = document.getElementById("votes-law-filter").value.trim().toLowerCase();
 
     let votes = currentDetail.votes || [];
@@ -2201,6 +2244,32 @@ function renderVotesTable() {
         votes = votes.filter((v) => {
             const searchable = `${v.ln || ""} ${v.t || ""}`.toLowerCase();
             return searchable.includes(lawFilter);
+        });
+    }
+
+    // Coalition alignment filter: show only votes where legislator aligned with selected coalition
+    if (coalitionFilter) {
+        votes = votes.filter((v) => {
+            // Get the coalition's majority vote for this votación
+            let coalitionMajority = null;
+            if (coalitionFilter === "PJ") {
+                coalitionMajority = v.pj;
+            } else if (coalitionFilter === "UCR") {
+                coalitionMajority = v.ucr;
+            } else if (coalitionFilter === "JxC") {
+                coalitionMajority = v.pro;  // JxC displayed under PRO field
+            } else if (coalitionFilter === "LLA") {
+                coalitionMajority = v.lla;
+            }
+
+            // Skip if coalition majority is not available for this vote
+            if (!coalitionMajority || coalitionMajority === "N/A") return false;
+
+            // Check if legislator's vote matches coalition majority
+            // AUSENTE and PRESIDENTE don't count as alignment
+            if (v.v === "AUSENTE" || v.v === "PRESIDENTE") return false;
+
+            return v.v === coalitionMajority;
         });
     }
 
@@ -2569,16 +2638,18 @@ function parseArgDate(dateStr) {
         const orderEl = document.getElementById(prefix + "-order");
         const chamberEl = document.getElementById(prefix + "-chamber");
         const coalitionEl = document.getElementById(prefix + "-coalition");
+        const activityEl = document.getElementById(prefix + "-activity");
         const pagesizeEl = document.getElementById(prefix + "-pagesize");
 
         function updateUrl() {
             // Build URL with hash and query params
             const hash = prefix === "rv" ? "#ranking-votos" : "#ranking-afinidad";
             const params = new URLSearchParams();
-            
+
             // Update filter params
             if (chamberEl?.value) params.set(`${prefix}-chamber`, chamberEl.value);
             if (coalitionEl?.value) params.set(`${prefix}-coalition`, coalitionEl.value);
+            if (activityEl?.value) params.set(`${prefix}-activity`, activityEl.value);
             if (sortEl?.value) params.set(`${prefix}-sort`, sortEl.value);
             if (orderEl?.value) params.set(`${prefix}-order`, orderEl.value);
             params.set(`${prefix}-pagesize`, getPageSize());
@@ -2593,6 +2664,7 @@ function parseArgDate(dateStr) {
         if (orderEl) orderEl.addEventListener("change", () => { setAsc(orderEl.value === "asc"); onChange(); });
         if (chamberEl) chamberEl.addEventListener("change", onChange);
         if (coalitionEl) coalitionEl.addEventListener("change", onChange);
+        if (activityEl) activityEl.addEventListener("change", onChange);
         if (pagesizeEl) pagesizeEl.addEventListener("change", () => { setPageSize(parseInt(pagesizeEl.value, 10)); onChange(); });
         const table = document.getElementById(prefix + "-table");
         if (table) table.querySelectorAll(".ranking-sortable").forEach(th => {
@@ -2651,6 +2723,7 @@ function parseArgDate(dateStr) {
         function applyFilters(prefix, sortSetter, ascSetter, pageSetter, renderFn) {
             const chamberEl = document.getElementById(`${prefix}-chamber`);
             const coalitionEl = document.getElementById(`${prefix}-coalition`);
+            const activityEl = document.getElementById(`${prefix}-activity`);
             const sortEl = document.getElementById(`${prefix}-sort`);
             const orderEl = document.getElementById(`${prefix}-order`);
             const pagesizeEl = document.getElementById(`${prefix}-pagesize`);
@@ -2662,6 +2735,10 @@ function parseArgDate(dateStr) {
             }
             if (coalitionEl && params.has(`${prefix}-coalition`)) {
                 coalitionEl.value = params.get(`${prefix}-coalition`);
+                changed = true;
+            }
+            if (activityEl && params.has(`${prefix}-activity`)) {
+                activityEl.value = params.get(`${prefix}-activity`);
                 changed = true;
             }
             if (sortEl && params.has(`${prefix}-sort`)) {
@@ -2729,6 +2806,8 @@ function parseArgDate(dateStr) {
     if (votesYearFilter) votesYearFilter.addEventListener("change", () => { currentVotesPage = 1; renderVotesTable(); });
     const votesTypeFilter = document.getElementById("votes-type-filter");
     if (votesTypeFilter) votesTypeFilter.addEventListener("change", () => { currentVotesPage = 1; renderVotesTable(); });
+    const votesCoalitionFilter = document.getElementById("votes-coalition-filter");
+    if (votesCoalitionFilter) votesCoalitionFilter.addEventListener("change", () => { currentVotesPage = 1; renderVotesTable(); });
     const votesLawFilter = document.getElementById("votes-law-filter");
     if (votesLawFilter) votesLawFilter.addEventListener("input", debounce(() => { currentVotesPage = 1; renderVotesTable(); }, 250));
 
