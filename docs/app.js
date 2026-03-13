@@ -943,11 +943,13 @@ function shareRanking(prefix) {
     // Add ranking-specific filter parameters
     const chamberEl = document.getElementById(`${prefix}-chamber`);
     const coalitionEl = document.getElementById(`${prefix}-coalition`);
+    const activityEl = document.getElementById(`${prefix}-activity`);
     const sortEl = document.getElementById(`${prefix}-sort`);
     const orderEl = document.getElementById(`${prefix}-order`);
 
     if (chamberEl && chamberEl.value) params.set(`${prefix}-chamber`, chamberEl.value);
     if (coalitionEl && coalitionEl.value) params.set(`${prefix}-coalition`, coalitionEl.value);
+    if (activityEl && activityEl.value) params.set(`${prefix}-activity`, activityEl.value);
     if (sortEl && sortEl.value) params.set(`${prefix}-sort`, sortEl.value);
     if (orderEl && orderEl.value) params.set(`${prefix}-order`, orderEl.value);
 
