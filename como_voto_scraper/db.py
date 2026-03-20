@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from pathlib import Path
 
 from .core import HCDN_BASE, SENADO_BASE, classify_bloc, log
@@ -113,6 +114,11 @@ class ConsolidatedDB:
             self.provinces.append(province)
             self._prov_idx[province] = idx
         return self._prov_idx[province]
+    
+    def _strip_accents(self, text: str) -> str:
+        """Remove Unicode accents (e.g. ABSTENCIÓN -> ABSTENCION)."""
+        nfkd = unicodedata.normalize("NFKD", text)
+        return "".join(c for c in nfkd if not unicodedata.combining(c))
 
     def add_votacion(self, raw: dict) -> None:
         """Add a votacion in the raw (expanded) format, converting to compact."""
@@ -128,7 +134,7 @@ class ConsolidatedDB:
             name_idx = self._get_name_idx(name)
             bloc_idx = self._get_bloc_idx(vote_row.get("bloc", ""))
             prov_idx = self._get_prov_idx(vote_row.get("province", ""))
-            vote_code = VOTE_ENCODE.get(vote_row.get("vote", "").upper(), 0)
+            vote_code = VOTE_ENCODE.get(self._strip_accents(vote_row.get("vote", "").upper()), 0)
             compact_votes.append([name_idx, bloc_idx, prov_idx, vote_code])
 
             photo_id = vote_row.get("photo_id", "")
