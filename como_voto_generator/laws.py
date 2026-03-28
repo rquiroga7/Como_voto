@@ -260,12 +260,31 @@ def get_common_name(title: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 def extract_law_group_key(votacion: dict) -> str:
+    """Extract a grouping key for a votacion.
+    
+    Priority:
+    1. Use common_name (from law name recognition) + year for well-known laws
+    2. Use O.D. number for laws with Orden del Día identifier
+    3. Use Expediente number for laws with file number
+    4. Use cleaned title as fallback
+    """
     title = votacion.get("title", "")
     date = votacion.get("date", "")
     chamber = votacion.get("chamber", "")
+    
+    # Extract year for common_name grouping
+    year = ""
+    date_match = re.search(r"(\d{2}/\d{2}/\d{4})", date)
+    if date_match:
+        year = date_match.group(1)[-2:]  # Last 2 digits of year
+    
+    # Check if this votacion has a recognized common_name
+    common_name = votacion.get("_common_name")
+    if common_name:
+        # Group by common_name + chamber + year
+        return f"{chamber}|COMMON:{common_name}|{year}"
 
     date_part = ""
-    date_match = re.search(r"(\d{2}/\d{2}/\d{4})", date)
     if date_match:
         date_part = date_match.group(1)
 
@@ -303,6 +322,13 @@ def build_law_groups(all_votaciones: list[dict]) -> dict:
         }
     )
 
+    # Pre-compute common_name for each votacion
+    for votacion in all_votaciones:
+        title = votacion.get("title", "")
+        common_name = get_common_name(title)
+        if common_name:
+            votacion["_common_name"] = common_name
+
     for votacion in all_votaciones:
         key = extract_law_group_key(votacion)
         group = groups[key]
@@ -313,7 +339,57 @@ def build_law_groups(all_votaciones: list[dict]) -> dict:
             group["date"] = votacion.get("date", "")
         group["chamber"] = votacion.get("chamber", "")
 
+    # For each group, determine which votacion is "En General"
+    # If multiple have explicit En General designation, use the earliest by timestamp
+    # If none has explicit En General, use the earliest by timestamp
+    # IMPORTANT: Only mark as En General if there's no specific section (Título, Cap., Art.)
+    from datetime import datetime
+    from .normalization import extract_section_label
+    
+    def _parse_date(date_value: str) -> datetime:
+        date_value = (date_value or "").strip()
+        try:
+            return datetime.strptime(date_value, "%d/%m/%Y - %H:%M")
+        except (ValueError, AttributeError):
+            try:
+                return datetime.strptime(date_value[:10], "%d/%m/%Y")
+            except (ValueError, AttributeError):
+                return datetime.min
+    
     for group in groups.values():
+        votaciones = group["votaciones"]
+        
+        # First, determine the section label for each votacion using the same logic as extract_section_label
+        # Only consider it "En General" if extract_section_label returns "En General"
+        explicit_en_general_indices = []
+        for i, votacion in enumerate(votaciones):
+            title = votacion.get("title", "")
+            vtype = votacion.get("type", "")
+            section_label = extract_section_label(title, vtype)
+            if section_label == "En General":
+                votacion["_is_en_general"] = True
+                explicit_en_general_indices.append(i)
+            else:
+                votacion["_is_en_general"] = False
+        
+        # If there are explicit En General votaciones, mark only the earliest one
+        if explicit_en_general_indices:
+            earliest_idx = min(
+                explicit_en_general_indices,
+                key=lambda i: _parse_date(votaciones[i].get("date", ""))
+            )
+            # Unmark all others
+            for i in explicit_en_general_indices:
+                if i != earliest_idx:
+                    votaciones[i]["_is_en_general"] = False
+        elif len(votaciones) > 0:
+            # No explicit En General, mark the earliest one overall
+            earliest_idx = min(
+                range(len(votaciones)),
+                key=lambda i: _parse_date(votaciones[i].get("date", ""))
+            )
+            votaciones[earliest_idx]["_is_en_general"] = True
+
         common_name = get_common_name(group["title"])
         if common_name:
             group["common_name"] = common_name

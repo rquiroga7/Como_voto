@@ -103,7 +103,11 @@ def build_law_detail_data(law_groups: dict) -> tuple[list[dict], dict[int, dict]
 
             title_str = votacion.get("title", "")
             vtype = votacion.get("type", "")
-            tp_label = extract_section_label(title_str, vtype)
+            # Use _is_en_general flag if available, otherwise extract from title
+            if votacion.get("_is_en_general"):
+                tp_label = "En General"
+            else:
+                tp_label = extract_section_label(title_str, vtype)
 
             entry: dict = {
                 "t": title_str[:200],
@@ -1136,24 +1140,6 @@ def generate_site_data(legislators: dict, law_groups: dict) -> None:
             if not any(v["g"] for v in group["votes"]):
                 if len(group["votes"]) == 1:
                     group["votes"][0]["g"] = True
-                else:
-                    # When no vote has explicit "En General" designation,
-                    # mark the earliest vote (by timestamp) as the "En General" vote.
-                    def _parse_vote_date(date_value: str) -> datetime:
-                        date_value = (date_value or "").strip()
-                        try:
-                            return datetime.strptime(date_value, "%d/%m/%Y - %H:%M")
-                        except (ValueError, AttributeError):
-                            try:
-                                return datetime.strptime(date_value[:10], "%d/%m/%Y")
-                            except (ValueError, AttributeError):
-                                return datetime.min
-
-                    earliest_idx = min(
-                        range(len(group["votes"])),
-                        key=lambda i: _parse_vote_date(group["votes"][i].get("d", ""))
-                    )
-                    group["votes"][earliest_idx]["g"] = True
 
             # pick first available vote URL to act as law link
             law_url = ""
@@ -1184,6 +1170,17 @@ def generate_site_data(legislators: dict, law_groups: dict) -> None:
 
         display_name = _normalize_display_name(leg["name"])
 
+        # Calculate presentismo only considering "En General" votes (same as ranking)
+        all_votes = leg.get("votes", [])
+        en_general_votes = [v for v in all_votes if v.get("al") == "En General"]
+        total_en_general = len(en_general_votes)
+        ausente_en_general = sum(1 for v in en_general_votes if v.get("v") == "AUSENTE")
+        trailing_ausente_detail = _count_trailing_ausente(en_general_votes, leg_terms)
+        effective_total_detail = total_en_general - trailing_ausente_detail
+        effective_ausente_detail = ausente_en_general - trailing_ausente_detail
+        total_present_detail = effective_total_detail - effective_ausente_detail
+        presentismo_detail = round(total_present_detail / effective_total_detail * 100, 1) if effective_total_detail > 0 else None
+
         detail = {
             "name": display_name,
             "name_key": key,
@@ -1195,6 +1192,7 @@ def generate_site_data(legislators: dict, law_groups: dict) -> None:
             "coalition": detail_coalition,
             "yearly_stats": leg["yearly_stats"],
             "trailing_ausente": _count_trailing_ausente(leg.get("votes", []), leg_terms),
+            "presentismo": presentismo_detail,
             "yearly_alignment": yearly_alignment_pct,
             "alignment": {coal: compute_weighted_alignment(leg["yearly_alignment"], coal) for coal in ["PJ", "UCR", "PRO", "JxC", "LLA"]},
             "era_alignment": {

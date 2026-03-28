@@ -195,9 +195,6 @@ def extract_section_label(title: str, vtype: str = "") -> str:
     """Extrae una etiqueta descriptiva de sección desde un título de votación."""
     cleaned = _clean_votacion_title(title)
 
-    if _EN_GRAL_RE.search(cleaned) or "EN GENERAL" in vtype.upper():
-        return "En General"
-
     parts: list[str] = []
     for match in _TITULO_RE.finditer(cleaned):
         parts.append(f"Título {match.group(1)}")
@@ -221,6 +218,10 @@ def extract_section_label(title: str, vtype: str = "") -> str:
                 seen.add(part)
                 unique.append(part)
         return ", ".join(unique)
+
+    # Only check for En General / En Particular if no specific section was found
+    if _EN_GRAL_RE.search(cleaned) or "EN GENERAL" in vtype.upper():
+        return "En General"
 
     if re.search(r"en\s+particular", cleaned, re.IGNORECASE):
         return "En Particular"

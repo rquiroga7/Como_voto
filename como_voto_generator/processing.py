@@ -283,20 +283,25 @@ def build_legislator_data(all_votaciones: list[dict], law_groups: dict) -> dict:
 
             norm_vote = normalize_vote(vote_record.get("vote", ""))
 
+            # Determine article_label - prioritize _is_en_general flag from law group
             article_label = _article_from_slug(votacion.get("url", ""))
             if not article_label:
-                title_upper = title.upper()
-                title_match = re.search(r"T[IÍ]TULO\s+([\dIVXLCDM]+)", title_upper)
-                if title_match:
-                    article_label = f"Título {title_match.group(1)}"
-                elif "EN GENERAL" in title_upper or vtype.upper() == "EN GENERAL":
+                # Check if this votacion is marked as En General in the law group
+                if votacion.get("_is_en_general"):
                     article_label = "En General"
-                elif "EN PARTICULAR" in title_upper or vtype.upper() == "EN PARTICULAR":
-                    art_match = re.search(r"ART[IÍ]?CULO?\s*\.?\s*(\d+)", title, re.IGNORECASE)
-                    if art_match:
-                        article_label = f"Art. {art_match.group(1)}"
-                    else:
-                        article_label = "En Particular"
+                else:
+                    title_upper = title.upper()
+                    title_match = re.search(r"T[IÍ]TULO\s+([\dIVXLCDM]+)", title_upper)
+                    if title_match:
+                        article_label = f"Título {title_match.group(1)}"
+                    elif "EN GENERAL" in title_upper or vtype.upper() == "EN GENERAL":
+                        article_label = "En General"
+                    elif "EN PARTICULAR" in title_upper or vtype.upper() == "EN PARTICULAR":
+                        art_match = re.search(r"ART[IÍ]?CULO?\s*\.?\s*(\d+)", title, re.IGNORECASE)
+                        if art_match:
+                            article_label = f"Art. {art_match.group(1)}"
+                        else:
+                            article_label = "En Particular"
 
             vote_entry = {
                 "vid": votacion_id,

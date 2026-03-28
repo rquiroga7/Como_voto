@@ -1179,21 +1179,10 @@ function renderLegislatorDetail(data) {
 
     // Presentismo + terms info card
     const infoCard = document.getElementById("leg-info-card");
-    const stats = data.yearly_stats || {};
-    const trailingAus = data.trailing_ausente || 0;
-    // Use ALL years (no filtering) to match ranking calculation
-    // Use same formula as Python: total_present = total_votes - total_ausente
-    let totalV = 0, totalAusente = 0;
-    for (const y of Object.keys(stats)) {
-        const s = stats[y];
-        totalV     += (s.total || 0);
-        totalAusente += (s.AUSENTE || 0);
-    }
-    // Exclude trailing AUSENTE votes (post-departure absences)
-    const effectiveV = totalV - trailingAus;
-    const effectiveAusente = totalAusente - trailingAus;
-    const totalPresent = effectiveV - effectiveAusente;
-    const presentismoPct = effectiveV > 0 ? Math.round(totalPresent / effectiveV * 100) : null;
+    // Use pre-calculated presentismo from Python (En General votes only)
+    const presentismoPct = data.presentismo !== undefined && data.presentismo !== null
+        ? Math.round(data.presentismo)
+        : null;
     document.getElementById("leg-presentismo").textContent =
         presentismoPct !== null ? presentismoPct + "\u00a0%" : "N/A";
 
@@ -1207,20 +1196,23 @@ function renderLegislatorDetail(data) {
     if (terms.length > 0) {
         const chLabel = (ch) => ch === "diputados" ? "Diputado/a" : "Senador/a";
         const chCls   = (ch) => ch === "diputados" ? "badge-diputados" : "badge-senadores";
+        
+        // Filter votes to En General only for presentismo calculation
+        const allVotes = data.votes || [];
+        const enGeneralVotes = allVotes.filter(v => v.al === "En General");
+        
         const rows = terms.map((t, idx) => {
             const period = t.yf === t.yt ? t.yf : `${t.yf}\u2013${t.yt}`;
-            // Per-term presentismo: sum yearly_stats for years within [yf, yt]
-            // Use same formula as Python: total_present = total_votes - total_ausente
-            let termV = 0, termAusente = 0;
-            for (let y = t.yf; y <= t.yt; y++) {
-                const s = stats[String(y)];
-                if (!s || (s.total||0) < 1) continue;
-                termV      += (s.total || 0);
-                termAusente += (s.AUSENTE || 0);
-            }
+            // Per-term presentismo: filter En General votes within [yf, yt]
+            const termVotes = enGeneralVotes.filter(v => {
+                const yr = v.yr || 0;
+                return yr >= t.yf && yr <= t.yt;
+            });
+            const termTotal = termVotes.length;
+            const termAusente = termVotes.filter(v => v.v === "AUSENTE").length;
             // For the last term, exclude trailing post-departure absences
-            const termTrail = (idx === terms.length - 1) ? trailingAus : 0;
-            const effTermV = termV - termTrail;
+            const termTrail = (idx === terms.length - 1) ? (data.trailing_ausente || 0) : 0;
+            const effTermV = termTotal - termTrail;
             const effTermAusente = termAusente - termTrail;
             const effTermPresent = effTermV - effTermAusente;
             const tPct = effTermV > 0 ? Math.round(effTermPresent / effTermV * 100) + "\u00a0%" : "N/A";
@@ -2020,11 +2012,12 @@ function shareTwitter() {
 function fullYearRange(data) {
     const stats = data.yearly_stats || {};
     // Only include years where the legislator cast at least 5 votes
+    // Include PRESIDENTE votes in the count
     return Object.keys(stats)
         .map(Number)
         .filter((y) => {
             const s = stats[String(y)];
-            return (s.AFIRMATIVO || 0) + (s.NEGATIVO || 0) + (s.ABSTENCION || 0) + (s.AUSENTE || 0) >= 5;
+            return (s.AFIRMATIVO || 0) + (s.NEGATIVO || 0) + (s.ABSTENCION || 0) + (s.AUSENTE || 0) + (s.PRESIDENTE || 0) >= 5;
         })
         .sort((a, b) => a - b)
         .map(String);
