@@ -918,6 +918,7 @@ body {
 .waffle-card-meta {
     display: flex;
     gap: 0.5rem;
+    flex-shrink: 0;
 }
 
 /* Small portrait in waffle header (Leyes destacadas) */
@@ -1176,6 +1177,12 @@ body {
     flex-shrink: 0;
 }
 
+/* Allow text to wrap in header info section to prevent cropping long party names */
+.aec-info {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
 .aec-photo-placeholder {
     width: 48px;
     height: 48px;
@@ -1188,12 +1195,17 @@ body {
     font-weight: 700;
     font-size: 0.95rem;
     color: var(--color-text);
+    overflow-wrap: break-word;
+    word-wrap: break-word;
 }
 
 .aec-meta {
     font-size: 0.75rem;
     color: var(--color-text-secondary);
     margin-top: 0.15rem;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    line-height: 1.35;
 }
 
 .aec-chart-title {

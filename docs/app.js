@@ -1249,7 +1249,7 @@ function renderLegislatorDetail(data) {
     const chamberLabel = chambers.length > 1 ? "HCD + HCS" : (chambers[0] === "diputados" ? "HCD" : "HCS");
     document.getElementById("waffle-card-meta").innerHTML = `
         <span class="badge badge-${chambers[0]}">${chamberLabel}</span>
-        <span class="badge badge-${data.coalition.toLowerCase()}">${shortPartyName(data.bloc)}</span>
+        <span class="badge badge-${data.coalition.toLowerCase()}">${escapeHtml(data.bloc)}</span>
     `;
 
     // Populate waffle year filter (only years that have notable laws)
@@ -1655,9 +1655,30 @@ async function exportCardImage(cardId, btnId, mode = "copy") {
     const EXPORT_MAX_W = 360;
     const prevWidth    = card.style.width;
     const prevMaxWidth = card.style.maxWidth;
+    
+    // Hide card off-screen BEFORE making any changes to prevent flash
+    card.style.position = "absolute";
+    card.style.left     = "-9999px";
+    card.style.top      = "0";
     card.style.width    = EXPORT_MAX_W + "px";
     card.style.maxWidth = EXPORT_MAX_W + "px";
     card.classList.add("exporting");
+
+    // Shorten long party names in badges for export to prevent cropping
+    const badges = card.querySelectorAll(".waffle-card-meta .badge");
+    const originalBadgeTexts = [];
+    badges.forEach((badge, idx) => {
+        originalBadgeTexts[idx] = badge.textContent;
+        // Check if this is a coalition badge (not chamber badge)
+        if (badge.classList.contains("badge-pj") || badge.classList.contains("badge-ucr") ||
+            badge.classList.contains("badge-pro") || badge.classList.contains("badge-lla") ||
+            badge.classList.contains("badge-otros")) {
+            const shortName = shortPartyName(originalBadgeTexts[idx]);
+            if (shortName !== originalBadgeTexts[idx]) {
+                badge.textContent = shortName;
+            }
+        }
+    });
 
     // Fix waffle label column width so all tile columns are left-aligned.
     // Measure every law name with an offscreen canvas, find the widest, and
@@ -1794,8 +1815,19 @@ async function exportCardImage(cardId, btnId, mode = "copy") {
         btn.innerHTML = "Error :(";
         setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 2000);
     } finally {
+        // Restore original badge texts
+        const badges = card.querySelectorAll(".waffle-card-meta .badge");
+        badges.forEach((badge, idx) => {
+            if (originalBadgeTexts[idx] !== undefined) {
+                badge.textContent = originalBadgeTexts[idx];
+            }
+        });
+        
         card.style.width    = prevWidth;
         card.style.maxWidth = prevMaxWidth;
+        card.style.position = "";
+        card.style.left     = "";
+        card.style.top      = "";
         card.classList.remove("exporting");
         // Remove the fixed widths so the live layout returns to normal
         card.querySelectorAll(".waffle-law-label").forEach(label => {
@@ -2401,6 +2433,7 @@ function shortPartyName(name) {
         { re: /frente\s+de\s+izquierda.*unidad/i, short: "FIT-U" },
         { re: /frente\s+de\s+izquierda/i, short: "FIT" },
         { re: /frente\s+de\s+todos/i, short: "FdT" },
+        { re: /la\s+libertad\s+avanza/i, short: "LLA" },
     ];
 
     for (const a of aliases) {
