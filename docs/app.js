@@ -833,7 +833,7 @@ function renderRankingAlignment() {
 
 // Column label maps for export titles
 const RANKING_COL_LABELS = {
-    tv: "Total de Votaciones", pres: "Presentismo", aus: "Ausencias", abst: "Abstenciones",
+    tv: "Leyes en General Votadas", pres: "Presentismo", aus: "Ausencias", abst: "Abstenciones",
     vpj: "Votos con PJ", vucr: "Votos con UCR", vpro: "Votos con JxC", vlla: "Votos con LLA",
 };
 

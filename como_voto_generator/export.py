@@ -994,7 +994,17 @@ def generate_site_data(legislators: dict, law_groups: dict) -> None:
         effective_ausente = ausente_en_general - trailing_ausente
         total_present = effective_total - effective_ausente
         presentismo_pct = round(total_present / effective_total * 100, 1) if effective_total > 0 else None
-        
+
+        # For ranking: use only En General votes for votaciones and ausencias counts
+        # This matches the presentismo calculation which is also En General only
+        all_votes = leg.get("votes", [])
+        en_general_votes = [v for v in all_votes if v.get("al") == "En General"]
+        total_en_general = len(en_general_votes)
+        ausente_en_general = sum(1 for v in en_general_votes if v.get("v") == "AUSENTE")
+        # Apply trailing ausente to En General votes
+        trailing_ausente_ranking = _count_trailing_ausente(en_general_votes, leg.get("_terms") or terms)
+        effective_ausente_ranking = ausente_en_general - trailing_ausente_ranking
+
         # Keep total votes count for reference (all votes, not just En General)
         total_votes = sum(stats.get("total", 0) for stats in leg["yearly_stats"].values())
         total_ausente = sum(stats.get("AUSENTE", 0) for stats in leg["yearly_stats"].values())
@@ -1035,10 +1045,10 @@ def generate_site_data(legislators: dict, law_groups: dict) -> None:
                 "vucr": votes_ucr,
                 "vpro": votes_pro,
                 "vlla": votes_lla,
-                "tv": total_votes,
+                "tv": total_en_general,  # En General votes only
                 "ph": leg.get("photo", ""),
                 "pres": presentismo_pct,
-                "aus": total_ausente,
+                "aus": effective_ausente_ranking,  # En General ausentes only
                 "abst": total_abstencion,
                 "by_co": by_co,
             }
