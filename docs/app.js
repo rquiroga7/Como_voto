@@ -2194,6 +2194,11 @@ function renderYearlyChart(data) {
                     data: years.map((y) => data.yearly_stats[y]?.AUSENTE || 0),
                     backgroundColor: "#94a3b8",
                 },
+                {
+                    label: "Presidente",
+                    data: years.map((y) => data.yearly_stats[y]?.PRESIDENTE || 0),
+                    backgroundColor: "#8b5cf6",
+                },
             ],
         },
         options: {
