@@ -103,6 +103,24 @@ COMMON_LAW_NAMES = [
     ),
     (
         [
+            "expropiación del 51% de las acciones de ypf",
+            "expropiacion del 51% de las acciones de ypf",
+            "expropiación de ypf",
+            "expropiacion de ypf",
+            "ypf yacimientos petrolíferos federales",
+            "ypf yacimientos petroliferos federales",
+            "ley de ypf",
+            "expropiación de yacimientos petrolíferos",
+            "expropiacion de yacimientos petroliferos",
+            "se declara de utilidad pública y sujeto a expropiación el 51%",
+            "se declara de utilidad publica y sujeto a expropiacion el 51%",
+            "expropiación el 51% del patrimonio",
+            "expropiacion el 51% del patrimonio",
+        ],
+        "Expropiación del 51% de YPF",
+    ),
+    (
+        [
             "cupo laboral trans",
             "cupo laboral travesti",
             "acceso al empleo formal para personas travestis",
