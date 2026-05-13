@@ -1041,9 +1041,10 @@ body {
 }
 
 .exporting .waffle-law-label {
-    min-width: 80px;
-    max-width: 110px;
-    font-size: 0.75rem;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    font-size: 0.78rem;
 }
 
 .tile-AFIRMATIVO {

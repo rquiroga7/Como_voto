@@ -1378,7 +1378,7 @@ function renderWaffle() {
             return `<div class="${cls}" title="${escapeAttr(tooltip)}" data-law-idx="${lawIdx}" data-vote-idx="${voteIdx}">${icon}</div>`;
         }).join("");
 
-        const displayName = escapeHtml(truncate(law.name, 60));
+        const displayName = escapeHtml(law.name || "");
         const yearLabel = law.year ? `<span class="waffle-law-year">${law.year}</span>` : "";
 
         html += `
@@ -1696,30 +1696,13 @@ async function exportCardImage(cardId, btnId, mode = "copy") {
         }
     });
 
-    // Fix waffle label column width so all tile columns are left-aligned.
-    // Measure every law name with an offscreen canvas, find the widest, and
-    // pin every .waffle-law-label to that width before html2canvas renders.
+    // Let the stacked waffle label use the full row width in the export image.
     const lawLabels = card.querySelectorAll(".waffle-law-label");
-    if (lawLabels.length > 0) {
-        const measCanvas = document.createElement("canvas");
-        const measCtx    = measCanvas.getContext("2d");
-        // Match the font used by .waffle-law-name inside .exporting
-        measCtx.font = "600 0.75rem/1.3 system-ui, sans-serif";
-        let maxPx = 0;
-        lawLabels.forEach(label => {
-            const nameEl = label.querySelector(".waffle-law-name");
-            const text   = nameEl ? nameEl.textContent : label.textContent;
-            const w = measCtx.measureText(text).width;
-            if (w > maxPx) maxPx = w;
-        });
-        // Add a small padding (6 px) and clamp to the allowed range (80–110 px)
-        const labelW = Math.min(110, Math.max(80, Math.ceil(maxPx) + 6));
-        lawLabels.forEach(label => {
-            label.style.width    = labelW + "px";
-            label.style.minWidth = labelW + "px";
-            label.style.maxWidth = labelW + "px";
-        });
-    }
+    lawLabels.forEach((label) => {
+        label.style.width = "100%";
+        label.style.minWidth = "0";
+        label.style.maxWidth = "none";
+    });
 
     void card.offsetHeight; // force reflow before capture
 
@@ -1845,7 +1828,7 @@ async function exportCardImage(cardId, btnId, mode = "copy") {
         card.style.left     = "";
         card.style.top      = "";
         card.classList.remove("exporting");
-        // Remove the fixed widths so the live layout returns to normal
+        // Remove the temporary full-width override so the live layout returns to normal
         card.querySelectorAll(".waffle-law-label").forEach(label => {
             label.style.width    = "";
             label.style.minWidth = "";
