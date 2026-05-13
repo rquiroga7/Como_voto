@@ -951,7 +951,7 @@ body {
 /* Waffle law rows */
 .waffle-law-row {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 0.75rem;
     padding: 0.5rem 0;
     border-bottom: 1px solid #f1f5f9;

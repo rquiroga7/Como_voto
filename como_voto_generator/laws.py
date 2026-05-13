@@ -134,8 +134,66 @@ COMMON_LAW_NAMES = [
     (["barrios populares"], "Barrios Populares"),
 
     # --- Education & science ---
-    (["financiamiento universitario"], "Financiamiento Universitario"),
-    (["educación sexual", "educacion sexual"], "Educacion Sexual"),
+    (['financiamiento universitario'], "Ley de Financiamiento Universitario"),
+    (['educación sexual', "educacion sexual"], "Educacion Sexual"),
+    (
+        [
+            "emergencia en discapacidad",
+            "emergencia nacional en discapacidad",
+        ],
+        "Emergencia Nacional en Discapacidad",
+    ),
+    (
+        [
+            "insistencia proyecto de ley 27.793",
+            "insistencia en la ley 27.793",
+            "ley 27.793",
+            "ley 27 793",
+            "rechazo al decreto 681/25 del poder ejecutivo nacional por el cual se suspende la ejecucion de la insistida ley 27.793",
+            "rechazo al decreto 681/25",
+        ],
+        "Emergencia Nacional en Discapacidad - rechazo del veto",
+    ),
+    (["insistencia proyecto de ley 27.795"], "Ley de Financiamiento Universitario - rechazo del veto"),
+    (["insistencia proyecto de ley 27.796"], "Ley de Financiamiento Universitario - rechazo del veto"),
+
+    # Variants for the university financing law (including senate titles)
+    (
+        [
+            "financiamiento de la educación universitaria",
+            "financiamiento de la educacion universitaria",
+            "financiamiento de la educación universitaria y recomposición del salario docente",
+            "financiamiento de la educacion universitaria y recomposicion del salario docente",
+            "financiamiento universidades",
+            "financiamiento universitario",
+            "financiamiento de universidades nacionales",
+            "financiamiento universidades nacionales",
+            "ley de financiamiento de universidades nacionales",
+            "ley de financiamiento universidades nacionales",
+            "ley de financiamiento de universidades",
+        ],
+        "Ley de Financiamiento Universitario",
+    ),
+
+    # Veto / insistencia related entries for the same subject. Map these
+    # to the requested veto canonical name.
+    (
+        [
+            "insistencia en la sancion original del proyecto de ley registrado bajo el numero 27.795",
+            "insistencia en la sancion original del proyecto de ley de financiamiento",
+            "insistencia ante el veto presidencial financiamiento",
+            "rechazo al veto financiamiento",
+            "rechazo del veto financiamiento",
+            "rechazo veto financiamiento",
+            "veto presidencial financiamiento",
+            "financiamiento de la educación universitaria",
+            "financiamiento de la educacion universitaria",
+            "financiamiento universitario",
+            "financiamiento de universidades nacionales",
+        ],
+        "Ley de Financiamiento Universitario - rechazo del veto",
+    ),
+
     # Specific science/technology laws (must come before general "Financiamiento Cientifico")
     (
         [
@@ -253,6 +311,22 @@ def get_common_name(title: str) -> str | None:
         return None
     normalized_title = COMMON_NORM(title)
 
+    # Prioritize veto/insistencia matches for the financiamiento law: if the
+    # title mentions both a veto/insistencia and financiamiento, return the
+    # specific veto canonical name so these votes are grouped separately.
+    if "financiamiento" in normalized_title:
+        veto_indicators = [
+            "veto presidencial",
+            "rechazo del veto",
+            "rechazo al veto",
+            "rechazo veto",
+            "insistencia proyecto",
+            "insistencia en la sancion",
+            "insistencia en la sanción",
+        ]
+        if any(ind in normalized_title for ind in veto_indicators):
+            return "Ley de Financiamiento Universitario - rechazo del veto"
+
     best_name: str | None = None
     best_score: tuple[int, int] = (0, 0)
 
@@ -344,6 +418,14 @@ def build_law_groups(all_votaciones: list[dict]) -> dict:
     for votacion in all_votaciones:
         title = votacion.get("title", "")
         common_name = get_common_name(title)
+        if not common_name:
+            # Fall back to the known generic title for the 2024 Diputados veto vote.
+            if (
+                votacion.get("chamber") == "diputados"
+                and votacion.get("id") == "5400"
+                and COMMON_NORM(title) == "expte. 17-pe-2024."
+            ):
+                common_name = "Ley de Financiamiento Universitario - rechazo del veto"
         if common_name:
             votacion["_common_name"] = common_name
 
@@ -376,6 +458,8 @@ def build_law_groups(all_votaciones: list[dict]) -> dict:
     
     for group in groups.values():
         votaciones = group["votaciones"]
+        # Sort votaciones by parsed datetime so ordering is chronological
+        votaciones.sort(key=lambda v: _parse_date(v.get("date", "")))
         
         # First, determine the section label for each votacion using the same logic as extract_section_label
         # Only consider it "En General" if extract_section_label returns "En General"
@@ -386,9 +470,12 @@ def build_law_groups(all_votaciones: list[dict]) -> dict:
             section_label = extract_section_label(title, vtype)
             if section_label == "En General":
                 votacion["_is_en_general"] = True
+                votacion["al"] = "En General"
                 explicit_en_general_indices.append(i)
             else:
                 votacion["_is_en_general"] = False
+                if votacion.get("al") == "En General":
+                    votacion["al"] = None
         
         # If there are explicit En General votaciones, mark only the earliest one
         if explicit_en_general_indices:
@@ -400,6 +487,8 @@ def build_law_groups(all_votaciones: list[dict]) -> dict:
             for i in explicit_en_general_indices:
                 if i != earliest_idx:
                     votaciones[i]["_is_en_general"] = False
+                    if votaciones[i].get("al") == "En General":
+                        votaciones[i]["al"] = None
         elif len(votaciones) > 0:
             # No explicit En General, mark the earliest one overall
             earliest_idx = min(
@@ -407,8 +496,15 @@ def build_law_groups(all_votaciones: list[dict]) -> dict:
                 key=lambda i: _parse_date(votaciones[i].get("date", ""))
             )
             votaciones[earliest_idx]["_is_en_general"] = True
+            votaciones[earliest_idx]["al"] = "En General"
+            # Clear any other residual 'al' markers
+            for i in range(len(votaciones)):
+                if i != earliest_idx and votaciones[i].get("al") == "En General":
+                    votaciones[i]["al"] = None
 
-        common_name = get_common_name(group["title"])
+        common_name = next((v.get("_common_name") for v in votaciones if v.get("_common_name")), None)
+        if not common_name:
+            common_name = get_common_name(group["title"])
         if common_name:
             group["common_name"] = common_name
 

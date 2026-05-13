@@ -244,6 +244,12 @@ function onLawSearchInput() {
         });
     }
 
+    results.sort((a, b) => {
+        const dateDiff = getLatestLawDate(b) - getLatestLawDate(a);
+        if (dateDiff !== 0) return dateDiff;
+        return (a.n || "").localeCompare(b.n || "", "es");
+    });
+
     results = results.slice(0, 40);
 
     if (results.length === 0) {
@@ -1333,6 +1339,12 @@ function renderWaffle() {
     if (selectedYears.size > 0) {
         laws = laws.filter((l) => selectedYears.has(String(l.year)));
     }
+
+    laws = laws.slice().sort((a, b) => {
+        const dateDiff = getLatestLawDate(b) - getLatestLawDate(a);
+        if (dateDiff !== 0) return dateDiff;
+        return (a.name || "").localeCompare(b.name || "", "es");
+    });
 
     const body = document.getElementById("waffle-card-body");
     const paginationContainer = document.getElementById("waffle-pagination");
@@ -2498,6 +2510,16 @@ function parseArgDate(dateStr) {
         ).getTime();
     }
     return new Date(dateStr).getTime() || 0;
+}
+
+function getLatestLawDate(law) {
+    let latest = 0;
+    const voteList = law?.votes || law?.vs || [];
+    for (const vote of voteList) {
+        const voteDate = parseArgDate(vote?.d || "");
+        if (voteDate > latest) latest = voteDate;
+    }
+    return latest;
 }
 
 

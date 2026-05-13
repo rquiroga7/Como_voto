@@ -148,7 +148,18 @@ def build_law_detail_data(law_groups: dict) -> tuple[list[dict], dict[int, dict]
         laws.append(law_entry)
 
     # Sort: notable (common_name) first, then by year desc, then by name
-    laws.sort(key=lambda x: (0 if x.get("cn") else 1, -(x.get("y") or 0), x.get("n", "")))
+        def _latest_vote_ts(law: dict) -> int:
+            latest = datetime.min
+            for vote_data in law.get("vs", []):
+                vote_date = _parse_vote_date(vote_data.get("d", ""))
+                if vote_date > latest:
+                    latest = vote_date
+            if latest == datetime.min:
+                return 0
+            return int(latest.timestamp())
+
+        # Sort: notable (common_name) first, then by newest vote date desc, then by name.
+        laws.sort(key=lambda x: (0 if x.get("cn") else 1, -_latest_vote_ts(x), x.get("n", "")))
 
     # Build per-year votes indices. Each year file gets its own compact name table.
     vi_to_year: dict[int, int] = {}
@@ -1168,7 +1179,18 @@ def generate_site_data(legislators: dict, law_groups: dict) -> None:
                     "notable": group.get("common_name") is not None,
                 }
             )
-        waffle_list.sort(key=lambda item: (-(item["year"] or 0), item["name"]))
+
+        def _waffle_latest_vote_ts(item: dict) -> int:
+            latest = datetime.min
+            for vote in item.get("votes", []):
+                vote_date = _parse_vote_date(vote.get("d", ""))
+                if vote_date > latest:
+                    latest = vote_date
+            if latest == datetime.min:
+                return 0
+            return int(latest.timestamp())
+
+        waffle_list.sort(key=lambda item: (-_waffle_latest_vote_ts(item), item["name"]))
 
         leg_terms = leg.get("_terms") or compute_terms(leg)
         if leg_terms:
