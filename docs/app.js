@@ -988,14 +988,18 @@ async function loadLegislatorDetail(nameKey, urlParams) {
     // Clean up previous detail state before showing new one
     cleanupLegislatorDetail();
 
-    currentLegKey = nameKey;
+    const requestedKey = String(nameKey || "");
+    const canonicalLeg = (legislatorsData || []).find((leg) => (leg.k || "").toLowerCase() === requestedKey.toLowerCase());
+    const canonicalKey = canonicalLeg ? canonicalLeg.k : requestedKey;
+
+    currentLegKey = canonicalKey;
 
     // Update URL so the page can be bookmarked / shared.
     // Only push a new state when the URL doesn't already point to this legislator.
     const currentLegInURL = new URLSearchParams(window.location.search).get("leg");
-    if (currentLegInURL !== nameKey) {
-        const shareParams = new URLSearchParams({ leg: nameKey });
-        history.pushState({ leg: nameKey }, "", `?${shareParams}`);
+    if (currentLegInURL !== canonicalKey) {
+        const shareParams = new URLSearchParams({ leg: canonicalKey });
+        history.pushState({ leg: canonicalKey }, "", `?${shareParams}`);
     }
 
     const detailSection = document.getElementById("legislator-detail");
@@ -1009,7 +1013,7 @@ async function loadLegislatorDetail(nameKey, urlParams) {
     document.getElementById("leg-name").textContent = "Cargando...";
     document.getElementById("leg-photo").style.display = "none";
 
-    const safeKey = nameKey.replace(/[^A-Z0-9_]/g, "_").substring(0, 80);
+    const safeKey = canonicalKey.replace(/[^A-Z0-9_]/g, "_").substring(0, 80);
     const url = `${DATA_PATH}/legislators/${safeKey}.json`;
 
     try {

@@ -951,8 +951,9 @@ body {
 /* Waffle law rows */
 .waffle-law-row {
     display: flex;
-    align-items: center;
-    gap: 0.75rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
     padding: 0.5rem 0;
     border-bottom: 1px solid #f1f5f9;
 }
@@ -962,9 +963,6 @@ body {
 }
 
 .waffle-law-label {
-    min-width: 200px;
-    max-width: 280px;
-    flex-shrink: 0;
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
@@ -988,7 +986,7 @@ body {
     display: flex;
     flex-wrap: wrap;
     gap: 3px;
-    flex: 1;
+    width: 100%;
 }
 
 .waffle-tile {
