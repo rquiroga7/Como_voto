@@ -2505,12 +2505,14 @@ function formatVoteShort(v) {
 
 function parseArgDate(dateStr) {
     if (!dateStr) return 0;
-    const match = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    const match = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s*-\s*(\d{2}):(\d{2}))?/);
     if (match) {
         return new Date(
             parseInt(match[3]),
             parseInt(match[2]) - 1,
-            parseInt(match[1])
+            parseInt(match[1]),
+            parseInt(match[4] || "0"),
+            parseInt(match[5] || "0")
         ).getTime();
     }
     return new Date(dateStr).getTime() || 0;
