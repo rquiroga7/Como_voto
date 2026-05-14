@@ -1157,6 +1157,27 @@ def generate_site_data(legislators: dict, law_groups: dict) -> None:
 
         waffle_list = []
         for group_key, group in waffle_groups.items():
+            # If a law group has multiple En General dictámenes, keep only the
+            # approved one so the waffle shows the dictamen that was approved
+            # overall, not the one this legislator personally voted for.
+            general_votes = [vote for vote in group["votes"] if vote.get("g")]
+            if len(general_votes) > 1:
+                approved_generals = [vote for vote in general_votes if vote.get("eg")]
+                chosen_general = approved_generals[0] if approved_generals else max(
+                    general_votes, key=lambda vote: _parse_vote_date(vote.get("d", ""))
+                )
+
+                filtered_votes: list[dict] = []
+                chosen_added = False
+                for vote in group["votes"]:
+                    if vote.get("g"):
+                        if not chosen_added and vote is chosen_general:
+                            filtered_votes.append(vote)
+                            chosen_added = True
+                    else:
+                        filtered_votes.append(vote)
+                group["votes"] = filtered_votes
+
             # Ensure at least one vote is marked g:True so the waffle always has a summary tile.
             if not any(v["g"] for v in group["votes"]):
                 if len(group["votes"]) == 1:

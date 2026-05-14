@@ -319,6 +319,7 @@ def build_legislator_data(all_votaciones: list[dict], law_groups: dict) -> dict:
                 "ln": law_display_name[:120] if law_display_name else "",
                 "cn": group_data.get("common_name", ""),
                 "al": article_label,
+                "eg": bool(votacion.get("_is_en_general")),
             }
             vot_url = votacion.get("url")
             if vot_url:
