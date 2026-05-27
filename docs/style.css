@@ -1932,10 +1932,13 @@ body {
 .law-bar-counts {
     min-width: 110px;
     font-size: 0.72rem;
-    color: var(--color-text-secondary);
     white-space: nowrap;
     flex-shrink: 0;
 }
+.vote-cnt-afirm { color: var(--color-afirmativo); font-weight: 600; }
+.vote-cnt-neg   { color: var(--color-negativo);   font-weight: 600; }
+.vote-cnt-abst  { color: var(--color-abstencion); font-weight: 600; }
+.vote-cnt-aus   { color: var(--color-ausente);    font-weight: 600; }
 
 /* ====== VOTE INFO POPUP ====== */
 .vote-popup-overlay {

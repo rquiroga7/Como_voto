@@ -385,20 +385,20 @@ function renderLawVotacion(v, idx, totalCount) {
 
         // Summary text
         const summaryParts = [];
-        if (a) summaryParts.push(`${a} ✓`);
-        if (n) summaryParts.push(`${n} ✗`);
-        if (b) summaryParts.push(`${b} ○`);
-        if (u) summaryParts.push(`${u} —`);
+        if (a) summaryParts.push(`<span class="vote-cnt-afirm">${a} ✓</span>`);
+        if (n) summaryParts.push(`<span class="vote-cnt-neg">${n} ✗</span>`);
+        if (b) summaryParts.push(`<span class="vote-cnt-abst">${b} ○</span>`);
+        if (u) summaryParts.push(`<span class="vote-cnt-aus">${u} —</span>`);
         const summary = summaryParts.join("  ");
 
         return `
         <div class="law-bar-row" data-party="${c.key}">
             <div class="law-bar-label">${c.label}</div>
             <div class="law-bar-track">
-                <div class="law-bar-seg bar-afirm" style="width:${pctA}%"></div>
-                <div class="law-bar-seg bar-neg" style="width:${pctN}%"></div>
-                <div class="law-bar-seg bar-abst" style="width:${pctB}%"></div>
-                <div class="law-bar-seg bar-aus" style="width:${pctU}%"></div>
+                <div class="law-bar-seg bar-afirm" style="width:${pctA}%"${a ? ` title="Afirmativo: ${a}"` : ""}></div>
+                <div class="law-bar-seg bar-neg" style="width:${pctN}%"${n ? ` title="Negativo: ${n}"` : ""}></div>
+                <div class="law-bar-seg bar-abst" style="width:${pctB}%"${b ? ` title="Abstención: ${b}"` : ""}></div>
+                <div class="law-bar-seg bar-aus" style="width:${pctU}%"${u ? ` title="Ausente: ${u}"` : ""}></div>
             </div>
             <div class="law-bar-counts">${summary}</div>
         </div>`;
@@ -407,19 +407,19 @@ function renderLawVotacion(v, idx, totalCount) {
     // Total row
     const totA = tot[0], totN = tot[1], totB = tot[2], totU = tot[3];
     const totParts = [];
-    if (totA) totParts.push(`${totA} ✓`);
-    if (totN) totParts.push(`${totN} ✗`);
-    if (totB) totParts.push(`${totB} ○`);
-    if (totU) totParts.push(`${totU} —`);
+    if (totA) totParts.push(`<span class="vote-cnt-afirm">${totA} ✓</span>`);
+    if (totN) totParts.push(`<span class="vote-cnt-neg">${totN} ✗</span>`);
+    if (totB) totParts.push(`<span class="vote-cnt-abst">${totB} ○</span>`);
+    if (totU) totParts.push(`<span class="vote-cnt-aus">${totU} —</span>`);
 
     const totalRow = `
     <div class="law-bar-row law-bar-total">
         <div class="law-bar-label">Total</div>
         <div class="law-bar-track">
-            <div class="law-bar-seg bar-afirm" style="width:${(totA / Math.max(totalVotes,1)) * 100}%"></div>
-            <div class="law-bar-seg bar-neg" style="width:${(totN / Math.max(totalVotes,1)) * 100}%"></div>
-            <div class="law-bar-seg bar-abst" style="width:${(totB / Math.max(totalVotes,1)) * 100}%"></div>
-            <div class="law-bar-seg bar-aus" style="width:${(totU / Math.max(totalVotes,1)) * 100}%"></div>
+            <div class="law-bar-seg bar-afirm" style="width:${(totA / Math.max(totalVotes,1)) * 100}%"${totA ? ` title="Afirmativo: ${totA}"` : ""}></div>
+            <div class="law-bar-seg bar-neg" style="width:${(totN / Math.max(totalVotes,1)) * 100}%"${totN ? ` title="Negativo: ${totN}"` : ""}></div>
+            <div class="law-bar-seg bar-abst" style="width:${(totB / Math.max(totalVotes,1)) * 100}%"${totB ? ` title="Abstención: ${totB}"` : ""}></div>
+            <div class="law-bar-seg bar-aus" style="width:${(totU / Math.max(totalVotes,1)) * 100}%"${totU ? ` title="Ausente: ${totU}"` : ""}></div>
         </div>
         <div class="law-bar-counts">${totParts.join("  ")}</div>
     </div>`;
