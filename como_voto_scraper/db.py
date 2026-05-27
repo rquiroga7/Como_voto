@@ -13,6 +13,7 @@ VOTE_ENCODE = {
     "ABSTENCION": 3,
     "ABSTENCIÓN": 3,   # accented form from Senate HTML
     "AUSENTE": 4,
+    "": 4,             # empty/unrecorded vote → AUSENTE
     "PRESIDENTE": 5,
 }
 VOTE_DECODE = {value: key for key, value in VOTE_ENCODE.items()}

@@ -17,7 +17,8 @@
 
 let legislatorsData = [];
 let lawsData = [];           // loaded from laws_detail.json
-let lawDescriptions = {};    // law name → first vote full title (for tooltips)
+let lawDescriptions = {};    // law name → tooltip text (kw or first vote title)
+let lawSearchIndex = {};     // law name → normalized full text for waffle keyword search
 let currentSelectedLaw = null;  // currently displayed law in the detail card
 let currentDetail = null;
 let currentLegKey = null; // The data-key used to load current legislator
@@ -1338,9 +1339,15 @@ function renderWaffle() {
     // Always filter to notable laws first
     laws = laws.filter((l) => l.notable === true);
 
-    // Apply text filter
+    // Apply text filter — also checks keyword index for keyword search
     if (lawFilter) {
-        laws = laws.filter((l) => l.name.toLowerCase().includes(lawFilter));
+        const filterNorm = normalizeText(lawFilter);
+        laws = laws.filter((l) => {
+            const nameLower = normalizeText(l.name || "");
+            if (nameLower.includes(filterNorm)) return true;
+            const kwIndex = lawSearchIndex[l.name] || "";
+            return kwIndex.includes(filterNorm);
+        });
     }
 
     // Apply year filter
@@ -1389,7 +1396,7 @@ function renderWaffle() {
         html += `
         <div class="waffle-law-row">
             <div class="waffle-law-label">
-                <span class="waffle-law-name"${lawDesc ? ` title="${escapeAttr(lawDesc)}"` : ""}>${displayName}</span>
+                <span class="waffle-law-name has-tooltip">${displayName}${lawDesc ? `<span class="stat-tooltip">${escapeHtml(lawDesc)}</span>` : ""}</span>
                 ${yearLabel}
             </div>
             <div class="waffle-tiles">${tiles}</div>
@@ -2564,12 +2571,21 @@ function getLatestLawDate(law) {
         const lawResp = await fetch(`${DATA_PATH}/laws_detail.json`);
         if (lawResp.ok) {
             lawsData = await lawResp.json();
-            // Build tooltip descriptions: law name → first vote full title
+            // Build tooltip descriptions and search index from laws_detail.json
             lawDescriptions = {};
+            lawSearchIndex = {};
             for (const l of lawsData) {
-                if (l.n && l.vs && l.vs.length > 0 && l.vs[0].t && !lawDescriptions[l.n]) {
-                    lawDescriptions[l.n] = l.vs[0].t;
+                if (!l.n) continue;
+                if (!lawDescriptions[l.n]) {
+                    // Prefer kw (human-readable keywords) over raw vote title
+                    const kwText = (l.kw && l.kw.length) ? l.kw.join(' · ') : "";
+                    const rawTitle = (l.vs && l.vs.length > 0) ? (l.vs[0].t || "") : "";
+                    lawDescriptions[l.n] = kwText || rawTitle;
                 }
+                // Build search index: name + all kw for this law
+                const existing = lawSearchIndex[l.n] || "";
+                const kwStr = (l.kw && l.kw.length) ? l.kw.join(" ") : "";
+                lawSearchIndex[l.n] = existing + " " + normalizeText(l.n + " " + kwStr + " " + (l.cn || ""));
             }
             // Populate year filter
             const years = [...new Set(lawsData.map((l) => l.y).filter(Boolean))].sort();

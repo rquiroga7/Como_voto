@@ -31,10 +31,33 @@ jobs:
         run: python scraper.py
         timeout-minutes: 120
 
+      - name: Check for new data
+        id: check_new
+        run: |
+          git add data/*.json
+          if git diff --cached --quiet; then
+            echo "new_data=false" >> $GITHUB_OUTPUT
+            echo "No new votaciones detected — skipping rebuild and deploy."
+          else
+            echo "new_data=true" >> $GITHUB_OUTPUT
+            echo "New votaciones detected — will rebuild and deploy."
+          fi
+
+      - name: Generate AI names for new laws
+        if: steps.check_new.outputs.new_data == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
+          AI_MODEL: ${{ secrets.AI_MODEL || 'gpt-4o-mini' }}
+        run: python tools/generate_ai_names.py
+        timeout-minutes: 30
+
       - name: Generate site data
+        if: steps.check_new.outputs.new_data == 'true'
         run: python generate_site.py
 
       - name: Commit updated data
+        if: steps.check_new.outputs.new_data == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

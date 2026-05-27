@@ -45,7 +45,7 @@ def compute_majority_vote(votes: list[dict], coalition: str) -> str:
             counts["NEGATIVO"] += 1
         elif "ABSTENCI" in vote or "ABSTENCION" in vote:
             counts["ABSTENCION"] += 1
-        elif "AUSENT" in vote:
+        elif "AUSENT" in vote or not vote:
             counts["AUSENTE"] += 1
 
     active_counts = {key: value for key, value in counts.items() if key != "AUSENTE"}
@@ -86,7 +86,7 @@ def compute_combined_majority(votes: list[dict], coalitions: list[str]) -> str:
             counts["NEGATIVO"] += 1
         elif "ABSTENCI" in vote or "ABSTENCION" in vote:
             counts["ABSTENCION"] += 1
-        elif "AUSENT" in vote:
+        elif "AUSENT" in vote or not vote:
             counts["AUSENTE"] += 1
 
     active_counts = {key: value for key, value in counts.items() if key != "AUSENTE"}

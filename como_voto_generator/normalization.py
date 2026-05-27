@@ -322,6 +322,9 @@ def normalize_vote(vote_str: str) -> str:
         return "AUSENTE"
     if "PRESIDEN" in vote:
         return "PRESIDENTE"
+    if not vote:
+        # Empty string: no vote recorded (walked out, unregistered, etc.) → AUSENTE
+        return "AUSENTE"
     return vote
 
 
