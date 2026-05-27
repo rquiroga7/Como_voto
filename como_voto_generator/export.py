@@ -1133,6 +1133,11 @@ def generate_site_data(legislators: dict, law_groups: dict) -> None:
         # Build waffle groups — merge by common_name
         waffle_groups = defaultdict(lambda: {"name": "", "votes": [], "year": None, "common_name": None})
         for vote in leg["votes"]:
+            # Skip votes that are excluded globally (e.g. superseded votes)
+            vid_ch = vote.get("ch", "")
+            vid_id = vote.get("vid", "")
+            if vid_id and f"{vid_ch}:{vid_id}" in EXCLUDED_VOTE_IDS:
+                continue
             law_name = vote.get("ln", "")
             # Determine merge key: use common_name if available, else gk.
             common_name = vote.get("cn") or (get_common_name(law_name) if law_name else None)
@@ -1152,10 +1157,12 @@ def generate_site_data(legislators: dict, law_groups: dict) -> None:
 
             # Mark whether this is an "En General" vote
             article_label = vote.get("al", "")
+            vote_type_upper = vote.get("tp", "").upper()
             is_general = (
                 article_label == "En General"
                 or "EN GENERAL" in vote.get("t", "").upper()
                 or "VOT. EN GRAL" in vote.get("t", "").upper()
+                or "EN GENERAL" in vote_type_upper
             )
 
             entry = {
