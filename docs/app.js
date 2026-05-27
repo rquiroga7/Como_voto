@@ -17,6 +17,7 @@
 
 let legislatorsData = [];
 let lawsData = [];           // loaded from laws_detail.json
+let lawDescriptions = {};    // law name → first vote full title (for tooltips)
 let currentSelectedLaw = null;  // currently displayed law in the detail card
 let currentDetail = null;
 let currentLegKey = null; // The data-key used to load current legislator
@@ -268,8 +269,9 @@ function onLawSearchInput() {
             ? `<span class="badge badge-senadores">Sen.</span>`
             : "";
         const yearBadge = l.y ? `<span class="law-dropdown-year">${l.y}</span>` : "";
+        const desc = lawDescriptions[l.n] || "";
         return `
-        <div class="law-dropdown-item" data-law-idx="${idx}">
+        <div class="law-dropdown-item" data-law-idx="${idx}"${desc ? ` title="${escapeAttr(desc)}"` : ""}>
             <span class="law-dropdown-name">${notable}${escapeHtml(l.n)}</span>
             <span class="law-dropdown-meta">${yearBadge} ${chamberBadge}</span>
         </div>`;
@@ -1382,11 +1384,12 @@ function renderWaffle() {
 
         const displayName = escapeHtml(law.name || "");
         const yearLabel = law.year ? `<span class="waffle-law-year">${law.year}</span>` : "";
+        const lawDesc = lawDescriptions[law.name] || "";
 
         html += `
         <div class="waffle-law-row">
             <div class="waffle-law-label">
-                <span class="waffle-law-name">${displayName}</span>
+                <span class="waffle-law-name"${lawDesc ? ` title="${escapeAttr(lawDesc)}"` : ""}>${displayName}</span>
                 ${yearLabel}
             </div>
             <div class="waffle-tiles">${tiles}</div>
@@ -2561,6 +2564,13 @@ function getLatestLawDate(law) {
         const lawResp = await fetch(`${DATA_PATH}/laws_detail.json`);
         if (lawResp.ok) {
             lawsData = await lawResp.json();
+            // Build tooltip descriptions: law name → first vote full title
+            lawDescriptions = {};
+            for (const l of lawsData) {
+                if (l.n && l.vs && l.vs.length > 0 && l.vs[0].t && !lawDescriptions[l.n]) {
+                    lawDescriptions[l.n] = l.vs[0].t;
+                }
+            }
             // Populate year filter
             const years = [...new Set(lawsData.map((l) => l.y).filter(Boolean))].sort();
             const lawYearFilter = document.getElementById("law-year-filter");

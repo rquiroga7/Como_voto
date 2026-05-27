@@ -11,6 +11,7 @@ VOTE_ENCODE = {
     "AFIRMATIVO": 1,
     "NEGATIVO": 2,
     "ABSTENCION": 3,
+    "ABSTENCIÓN": 3,   # accented form from Senate HTML
     "AUSENTE": 4,
     "PRESIDENTE": 5,
 }
