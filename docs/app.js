@@ -1396,7 +1396,7 @@ function renderWaffle() {
         html += `
         <div class="waffle-law-row">
             <div class="waffle-law-label">
-                <span class="waffle-law-name has-tooltip">${displayName}${lawDesc ? `<span class="stat-tooltip">${escapeHtml(lawDesc)}</span>` : ""}</span>
+                <span class="waffle-law-name has-tooltip">${displayName}${lawDesc ? `<span class="stat-tooltip">${escapeHtml(lawDesc).replace(/\n/g, '<br>')}</span>` : ""}</span>
                 ${yearLabel}
             </div>
             <div class="waffle-tiles">${tiles}</div>
@@ -2577,10 +2577,9 @@ function getLatestLawDate(law) {
             for (const l of lawsData) {
                 if (!l.n) continue;
                 if (!lawDescriptions[l.n]) {
-                    // Prefer kw (human-readable keywords) over raw vote title
-                    const kwText = (l.kw && l.kw.length) ? l.kw.join(' · ') : "";
                     const rawTitle = (l.vs && l.vs.length > 0) ? (l.vs[0].t || "") : "";
-                    lawDescriptions[l.n] = kwText || rawTitle;
+                    const kwText = (l.kw && l.kw.length) ? l.kw.join(' · ') : "";
+                    lawDescriptions[l.n] = rawTitle && kwText ? `${rawTitle}\n${kwText}` : rawTitle || kwText;
                 }
                 // Build search index: name + all kw for this law
                 const existing = lawSearchIndex[l.n] || "";
