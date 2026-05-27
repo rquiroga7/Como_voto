@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from collections import defaultdict
+
+from .normalization import extract_section_label
 
 # ---------------------------------------------------------------------------
 # Common law names mapping
@@ -24,6 +27,18 @@ COMMON_LAW_NAMES = [
     # --- Economy & taxes ---
     (["impuesto a las ganancias"], "Impuesto a las Ganancias"),
     (["bienes personales"], "Bienes Personales"),
+    # Specific glacier rules before the generic "ley de presupuesto" rule so
+    # titles like "PRESUPUESTO MINIMOS PARA LA PROTECCION DE LOS GLACIARES" are
+    # correctly grouped under Ley de Glaciares rather than Presupuesto.
+    (
+        [
+            "presupuesto minimos para la proteccion de los glaciares",
+            "presupuesto mínimos para la protección de los glaciares",
+            "presupuestos minimos para la proteccion de los glaciares",
+            "presupuestos mínimos para la protección de los glaciares",
+        ],
+        "Ley de Glaciares",
+    ),
     (
         [
             "presupuesto general",
@@ -249,7 +264,16 @@ COMMON_LAW_NAMES = [
     (["etiquetado frontal"], "Etiquetado Frontal"),
     (["humedales"], "Ley de Humedales"),
     (["manejo del fuego"], "Manejo del Fuego"),
-    (["glaciares"], "Ley de Glaciares"),
+    (
+        [
+            "glaciares",
+            "presupuesto minimos para la proteccion de los glaciares",
+            "presupuesto mínimos para la protección de los glaciares",
+            "regimen de presupuestos minimos para la preservacion de los glaciares",
+            "régimen de presupuestos mínimos para la preservación de los glaciares",
+        ],
+        "Ley de Glaciares",
+    ),
     (
         [
             "energías renovables",
@@ -282,6 +306,18 @@ COMMON_LAW_NAMES = [
     (["inocencia fiscal"], "Inocencia Fiscal"),
 ]
 
+# ---------------------------------------------------------------------------
+# Vote IDs to exclude from output (e.g. duplicate/procedural votes where a
+# second vote on the same text is the definitive one).
+# Format: "<chamber>:<id>" where chamber is "senadores" or "diputados".
+# ---------------------------------------------------------------------------
+EXCLUDED_VOTE_IDS: set[str] = {
+    # Ley de Glaciares 29/09/2010: the Senate first voted NEGATIVO on its own
+    # text, then AFIRMATIVO on the Diputados text (which became Ley 26.639).
+    # Only keep the passing vote.
+    "senadores:1072",
+}
+
 
 def COMMON_NORM(value: str) -> str:
     return (
@@ -289,6 +325,7 @@ def COMMON_NORM(value: str) -> str:
         .encode("ascii", "ignore")
         .decode("ascii")
         .lower()
+        .strip()
     )
 
 
@@ -296,6 +333,29 @@ def COMMON_NORM(value: str) -> str:
 _COMMON_LAW_RULES: list[tuple[list[str], str]] = []
 for _keywords, _common_name in COMMON_LAW_NAMES:
     _COMMON_LAW_RULES.append(([COMMON_NORM(keyword) for keyword in _keywords], _common_name))
+
+# ---------------------------------------------------------------------------
+# AI names cache (lazy-loaded from data/ai_law_names.json)
+# ---------------------------------------------------------------------------
+
+_ai_names_cache: dict[str, str] | None = None
+
+
+def _get_ai_names_cache() -> dict[str, str]:
+    """Return the AI names cache, loading it from disk on first access."""
+    global _ai_names_cache
+    if _ai_names_cache is None:
+        try:
+            from .common import DATA_DIR
+            cache_path = DATA_DIR / "ai_law_names.json"
+            if cache_path.exists():
+                with open(cache_path, encoding="utf-8") as f:
+                    _ai_names_cache = json.load(f)
+            else:
+                _ai_names_cache = {}
+        except Exception:
+            _ai_names_cache = {}
+    return _ai_names_cache
 
 
 def _kw_matches(kw_norm: str, t_norm: str) -> bool:
@@ -306,7 +366,12 @@ def _kw_matches(kw_norm: str, t_norm: str) -> bool:
 
 
 def get_common_name(title: str) -> str | None:
-    """Devuelve el nombre común de ley que mejor coincide con *title* o None."""
+    """Devuelve el nombre común de ley que mejor coincide con *title* o None.
+
+    Checks in order:
+    1. Hardcoded COMMON_LAW_NAMES rules (keyword matching)
+    2. AI-generated names cache (data/ai_law_names.json)
+    """
     if not title:
         return None
     normalized_title = COMMON_NORM(title)
@@ -344,7 +409,11 @@ def get_common_name(title: str) -> str | None:
                 best_score = score
                 best_name = common_name
 
-    return best_name
+    if best_name is not None:
+        return best_name
+
+    # Fall back to AI-generated cache
+    return _get_ai_names_cache().get(normalized_title)
 
 
 # ---------------------------------------------------------------------------
@@ -403,6 +472,39 @@ def extract_law_group_key(votacion: dict) -> str:
     return f"{chamber}|SINGLE|{votacion.get('id', '')}"
 
 
+def _title_section_priority(title: str, vtype: str = "") -> int:
+    """Return a priority for using this title as the canonical group title.
+
+    Lower number = more preferred.
+    0 = no section label (best canonical title)
+    1 = "En General"
+    2 = "En Particular"
+    3 = specific section (Capítulo, Título, Artículo) — least preferred
+    """
+    section = extract_section_label(title, vtype)
+    if not section:
+        return 0
+    if section == "En General":
+        return 1
+    if section == "En Particular":
+        return 2
+    return 3
+
+
+def _update_group_title(group: dict, title: str, vtype: str = "") -> None:
+    """Update the group's canonical title, preferring section-free titles."""
+    if not title:
+        return
+    current = group["title"]
+    if not current:
+        group["title"] = title
+        return
+    new_pri = _title_section_priority(title, vtype)
+    cur_pri = _title_section_priority(current)
+    if new_pri < cur_pri or (new_pri == cur_pri and len(title) > len(current)):
+        group["title"] = title
+
+
 def build_law_groups(all_votaciones: list[dict]) -> dict:
     groups = defaultdict(
         lambda: {
@@ -433,8 +535,7 @@ def build_law_groups(all_votaciones: list[dict]) -> dict:
         key = extract_law_group_key(votacion)
         group = groups[key]
         group["votaciones"].append(votacion)
-        if len(votacion.get("title", "")) > len(group["title"]):
-            group["title"] = votacion.get("title", "")
+        _update_group_title(group, votacion.get("title", ""), votacion.get("type", ""))
         if not group["date"]:
             group["date"] = votacion.get("date", "")
         group["chamber"] = votacion.get("chamber", "")
@@ -444,7 +545,6 @@ def build_law_groups(all_votaciones: list[dict]) -> dict:
     # If none has explicit En General, use the earliest by timestamp
     # IMPORTANT: Only mark as En General if there's no specific section (Título, Cap., Art.)
     from datetime import datetime
-    from .normalization import extract_section_label
     
     def _parse_date(date_value: str) -> datetime:
         date_value = (date_value or "").strip()

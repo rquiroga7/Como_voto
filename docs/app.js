@@ -239,7 +239,9 @@ function onLawSearchInput() {
     if (query) {
         const terms = queryNorm.split(/\s+/);
         results = results.filter((l) => {
-            const searchable = normalizeText(l.n || "");
+            const searchable = normalizeText(l.n || "")
+                + " " + normalizeText((l.kw || []).join(" "))
+                + " " + normalizeText(l.cn || "");
             return terms.every((t) => searchable.includes(t));
         });
     }

@@ -788,8 +788,10 @@ body {
 #info-export-card .leg-info-stat-value  { font-size: 1.15rem; }
 #info-export-card .leg-info-stat-label  { font-size: 0.40rem; }
 #info-export-card .leg-terms-table      { font-size: 0.55rem; }
-#info-export-card .leg-terms-table th   { font-size: 0.40rem; }
+#info-export-card .leg-terms-table th   { font-size: 0.40rem; white-space: nowrap; }
 #info-export-card .aec-chart-title      { font-size: 0.55rem; }
+#info-export-card .leg-terms-table td:last-child,
+#info-export-card .leg-terms-table th:last-child { text-align: center; }
 
 /* ====== WAFFLE VISUALIZATION ====== */
 .waffle-section {

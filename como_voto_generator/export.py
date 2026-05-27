@@ -7,9 +7,19 @@ import unicodedata
 from collections import defaultdict
 from datetime import datetime
 
+from .ai_names import cache_key as _ai_cache_key, load_ai_keywords_cache as _load_ai_kw
 from .common import DATA_DIR, DOCS_DATA_DIR, log, save_json
 from .data_loading import clean_date, extract_year, load_all_votaciones_from_db, practical_year_range
-from .laws import get_common_name
+from .laws import get_common_name, EXCLUDED_VOTE_IDS
+
+_ai_keywords_cache: dict[str, list[str]] | None = None
+
+
+def _get_ai_kw_cache() -> dict[str, list[str]]:
+    global _ai_keywords_cache
+    if _ai_keywords_cache is None:
+        _ai_keywords_cache = _load_ai_kw()
+    return _ai_keywords_cache
 from .normalization import (
     NAME_ALIASES,
     classify_bloc_mapped,
@@ -51,6 +61,11 @@ def build_law_detail_data(law_groups: dict) -> tuple[list[dict], dict[int, dict]
 
         vs_out: list[dict] = []
         for votacion in votaciones_raw:
+            # Skip votes that are explicitly excluded (e.g. superseded duplicate votes)
+            vid_raw = votacion.get("id")
+            if vid_raw and f"{chamber}:{vid_raw}" in EXCLUDED_VOTE_IDS:
+                continue
+
             votes_list = votacion.get("votes", [])
             if not votes_list:
                 continue
@@ -144,6 +159,9 @@ def build_law_detail_data(law_groups: dict) -> tuple[list[dict], dict[int, dict]
         }
         if group.get("common_name"):
             law_entry["cn"] = group["common_name"]
+        kw = _get_ai_kw_cache().get(_ai_cache_key(group.get("title", "")))
+        if kw:
+            law_entry["kw"] = kw
 
         laws.append(law_entry)
 
