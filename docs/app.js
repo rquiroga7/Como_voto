@@ -2940,4 +2940,14 @@ function getLatestLawDate(law) {
     document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") hideVotePopup();
     });
+
+    // Sticky header: show when main header scrolls out of view
+    const _mainHeader = document.querySelector(".header");
+    const _stickyHeader = document.getElementById("sticky-header");
+    if (_mainHeader && _stickyHeader) {
+        window.addEventListener("scroll", () => {
+            _stickyHeader.style.display =
+                _mainHeader.getBoundingClientRect().bottom <= 0 ? "block" : "none";
+        }, { passive: true });
+    }
 })();

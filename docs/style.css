@@ -61,35 +61,20 @@ body {
 
 /* ====== HEADER ====== */
 .header {
-    background: url('header_mainpage.png') center/cover no-repeat;
-    color: white;
-    padding: 2rem 0;
-    text-align: center;
+    background: url('header_mainpage2.png') center/cover no-repeat;
+    width: 100%;
+    aspect-ratio: 2500 / 275;
 }
 
-.header-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.logo {
-    font-size: 2.75rem;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.logo-icon {
-    font-size: 2.5rem;
-}
-
-.subtitle {
-    color: #ffffff;
-    font-size: 1rem;
-    font-weight: 700;
+.sticky-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: url('header_sticky.png') center/cover no-repeat;
+    height: calc(100vw * 92 / 2494);
+    display: none;
 }
 
 /* ====== SEARCH ====== */

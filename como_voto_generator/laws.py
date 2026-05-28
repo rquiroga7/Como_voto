@@ -62,6 +62,7 @@ COMMON_LAW_NAMES = [
 
     # --- Electoral & institutional ---
     (["boleta única", "boleta unica"], "Boleta Unica de Papel"),
+    (["huso horario"], "Cambio de Huso Horario"),
     (["ficha limpia"], "Ficha Limpia"),
     (["régimen electoral", "regimen electoral", "código electoral", "codigo electoral"], "Regimen Electoral"),
     (["paridad de género", "paridad de genero"], "Paridad de Genero"),
@@ -329,6 +330,61 @@ def COMMON_NORM(value: str) -> str:
     )
 
 
+_NON_LAW_VOTE_MARKERS = (
+    "apartamiento de reglamento",
+    "apartamiento del reglamento",
+    "apartamiento reglamento",
+    "mocion",
+    "mocion de reconsideracion",
+    "mocion de preferencia",
+    "mocion de privilegio",
+    "mocion solicitada",
+    "mocion del diputado",
+    "pedido de licencia",
+    "pedidos de licencia",
+    "licencia solicitada",
+    "solicitud de licencia",
+    "goce de dieta",
+    "habilitacion del tratamiento",
+    "habilitacion tratamiento",
+    "habilitacion de tablas",
+    "habilitacion tablas",
+    "habilitacion del tratamiento sobre tablas",
+    "pedido tratamiento sobre tablas",
+    "habilitacion proyectos de resolucion del temario",
+    "tratamiento sobre tablas",
+    "pedido de preferencia",
+    "pedido de informes",
+    "proyecto de resolucion",
+    "concurso publico",
+    "orden de merito",
+    "texto propuesto por dip",
+    "texto propuesto por diputad",
+)
+
+_SUSPICIOUS_AI_LAW_CUES = (
+    "mocion",
+    "apartamiento",
+    "habilitacion",
+    "solicitud",
+    "pedido de",
+    "tratamiento sobre tablas",
+    "preferencia",
+    "interpelacion",
+    "proyecto de resolucion",
+    "pedido de informes",
+    "texto propuesto por",
+)
+
+
+def is_non_law_vote(title: str, vtype: str = "") -> bool:
+    """Return True for procedural/parliamentary motion votes (non-law)."""
+    text = COMMON_NORM(f"{title} {vtype}")
+    if not text:
+        return False
+    return any(marker in text for marker in _NON_LAW_VOTE_MARKERS)
+
+
 # Precompute normalized keywords per rule so we don't re-normalize on every call.
 _COMMON_LAW_RULES: list[tuple[list[str], str]] = []
 for _keywords, _common_name in COMMON_LAW_NAMES:
@@ -365,6 +421,44 @@ def _kw_matches(kw_norm: str, t_norm: str) -> bool:
     return kw_norm in t_norm
 
 
+def _sanitize_ai_common_name(candidate: str | None, normalized_title: str) -> str | None:
+    if not candidate:
+        return None
+
+    candidate_norm = COMMON_NORM(candidate)
+
+    # Drop procedural labels that leaked into the AI cache.
+    if is_non_law_vote(candidate_norm):
+        return None
+
+    if any(cue in normalized_title for cue in _SUSPICIOUS_AI_LAW_CUES):
+        # Avoid "Ley <Apellido>" style aliases for procedural motions.
+        if candidate_norm.startswith("ley "):
+            return None
+
+    if candidate_norm.startswith("ley "):
+        if "comision investigadora" in normalized_title:
+            return None
+        if re.match(r"^[a-z]+(?:\s+[a-z]+)?\s*:\s*proyecto de ley", normalized_title):
+            return None
+        if candidate_norm == "ley omnibus" and not (
+            "omnibus" in normalized_title or "bases y puntos de partida" in normalized_title
+        ):
+            return None
+
+    if candidate_norm.startswith("ley "):
+        alias_part = candidate_norm[4:].strip()
+        alias_tokens = [t for t in re.findall(r"[a-z0-9]+", alias_part) if t not in {"de", "del", "la", "las", "el", "los", "y"}]
+        first = alias_tokens[0] if alias_tokens else ""
+        if first:
+            if re.search(rf"\b(diputad[oa]?|senador[ae]?)\b[^\n]*\b{re.escape(first)}\b", normalized_title):
+                return None
+            if normalized_title.startswith(f"{first} y otros"):
+                return None
+
+    return candidate
+
+
 def get_common_name(title: str) -> str | None:
     """Devuelve el nombre común de ley que mejor coincide con *title* o None.
 
@@ -373,6 +467,8 @@ def get_common_name(title: str) -> str | None:
     2. AI-generated names cache (data/ai_law_names.json)
     """
     if not title:
+        return None
+    if is_non_law_vote(title):
         return None
     normalized_title = COMMON_NORM(title)
 
@@ -412,8 +508,9 @@ def get_common_name(title: str) -> str | None:
     if best_name is not None:
         return best_name
 
-    # Fall back to AI-generated cache
-    return _get_ai_names_cache().get(normalized_title)
+    # Fall back to AI-generated cache, but filter obvious procedural/person aliases.
+    ai_name = _get_ai_names_cache().get(normalized_title)
+    return _sanitize_ai_common_name(ai_name, normalized_title)
 
 
 # ---------------------------------------------------------------------------
@@ -519,6 +616,9 @@ def build_law_groups(all_votaciones: list[dict]) -> dict:
     # Pre-compute common_name for each votacion
     for votacion in all_votaciones:
         title = votacion.get("title", "")
+        if is_non_law_vote(title, votacion.get("type", "")):
+            continue
+
         common_name = get_common_name(title)
         if not common_name:
             # Fall back to the known generic title for the 2024 Diputados veto vote.
@@ -602,10 +702,16 @@ def build_law_groups(all_votaciones: list[dict]) -> dict:
                 if i != earliest_idx and votaciones[i].get("al") == "En General":
                     votaciones[i]["al"] = None
 
-        common_name = next((v.get("_common_name") for v in votaciones if v.get("_common_name")), None)
-        if not common_name:
-            common_name = get_common_name(group["title"])
-        if common_name:
-            group["common_name"] = common_name
+        # Keep procedural votes in the dataset, but do not mark them as
+        # common_name so they don't appear as "Leyes destacadas".
+        procedural_only_group = all(
+            is_non_law_vote(v.get("title", ""), v.get("type", "")) for v in votaciones
+        )
+        if not procedural_only_group:
+            common_name = next((v.get("_common_name") for v in votaciones if v.get("_common_name")), None)
+            if not common_name:
+                common_name = get_common_name(group["title"])
+            if common_name:
+                group["common_name"] = common_name
 
     return dict(groups)

@@ -10,7 +10,7 @@ from datetime import datetime
 from .ai_names import cache_key as _ai_cache_key, load_ai_keywords_cache as _load_ai_kw
 from .common import DATA_DIR, DOCS_DATA_DIR, log, save_json
 from .data_loading import clean_date, extract_year, load_all_votaciones_from_db, practical_year_range
-from .laws import get_common_name, EXCLUDED_VOTE_IDS
+from .laws import get_common_name, EXCLUDED_VOTE_IDS, is_non_law_vote
 
 _ai_keywords_cache: dict[str, list[str]] | None = None
 
@@ -1140,7 +1140,8 @@ def generate_site_data(legislators: dict, law_groups: dict) -> None:
                 continue
             law_name = vote.get("ln", "")
             # Determine merge key: use common_name if available, else gk.
-            common_name = vote.get("cn") or (get_common_name(law_name) if law_name else None)
+            is_non_law = is_non_law_vote(vote.get("t", ""), vote.get("tp", ""))
+            common_name = None if is_non_law else (vote.get("cn") or (get_common_name(law_name) if law_name else None))
             if common_name:
                 year = vote.get("yr", "")
                 merge_key = f"COMMON|{common_name}|{year}" if year else f"COMMON|{common_name}"
