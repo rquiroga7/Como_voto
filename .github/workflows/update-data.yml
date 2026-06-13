@@ -34,7 +34,7 @@ jobs:
       - name: Check for new data
         id: check_new
         run: |
-          git add data/*.json
+          git add data/diputados.json data/senadores.json
           if git diff --cached --quiet; then
             echo "new_data=false" >> $GITHUB_OUTPUT
             echo "No new votaciones detected — skipping rebuild and deploy."

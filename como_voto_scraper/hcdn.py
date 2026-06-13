@@ -140,13 +140,23 @@ def get_slug_map() -> dict[str, str]:
             try:
                 import json
                 with open(SLUG_MAP_CACHE_FILE, "r", encoding="utf-8") as f:
-                    _SLUG_MAP = json.load(f)
-                log.info(f"Loaded slug map from cache: {len(_SLUG_MAP)} entries")
+                    old_slug_map = json.load(f)
+                log.info(f"Loaded slug map from cache: {len(old_slug_map)} entries")
                 
                 # Update only the latest year
                 current_year = datetime.now().year
                 log.info(f"Updating slug map for year {current_year}...")
-                _SLUG_MAP = fetch_hcdn_slug_map(update_latest_only=True)
+                new_slug_map = fetch_hcdn_slug_map(update_latest_only=True)
+                
+                # Only save if the map actually changed
+                if new_slug_map != old_slug_map:
+                    _SLUG_MAP = new_slug_map
+                    with open(SLUG_MAP_CACHE_FILE, "w", encoding="utf-8") as f:
+                        json.dump(_SLUG_MAP, f)
+                    log.info(f"Saved updated slug map to cache: {SLUG_MAP_CACHE_FILE}")
+                else:
+                    _SLUG_MAP = old_slug_map
+                    log.info("Slug map unchanged — skipping save")
             except Exception as exc:
                 log.warning(f"Failed to load slug map cache: {exc}")
                 _SLUG_MAP = fetch_hcdn_slug_map(update_latest_only=False)
@@ -154,14 +164,15 @@ def get_slug_map() -> dict[str, str]:
             log.info("Building HCDN slug map from search pages (one-time) ...")
             _SLUG_MAP = fetch_hcdn_slug_map(update_latest_only=False)
         
-        # Save to cache
-        try:
-            import json
-            with open(SLUG_MAP_CACHE_FILE, "w", encoding="utf-8") as f:
-                json.dump(_SLUG_MAP, f)
-            log.info(f"Saved slug map to cache: {SLUG_MAP_CACHE_FILE}")
-        except Exception as exc:
-            log.warning(f"Failed to save slug map cache: {exc}")
+        # Save to cache (first-time build only)
+        if not SLUG_MAP_CACHE_FILE.exists():
+            try:
+                import json
+                with open(SLUG_MAP_CACHE_FILE, "w", encoding="utf-8") as f:
+                    json.dump(_SLUG_MAP, f)
+                log.info(f"Saved slug map to cache: {SLUG_MAP_CACHE_FILE}")
+            except Exception as exc:
+                log.warning(f"Failed to save slug map cache: {exc}")
     return _SLUG_MAP
 
 
@@ -344,8 +355,14 @@ def scrape_diputados() -> None:
         if checked % 200 == 0:
             log.info(f"  Progress: checked {checked}, saved {new_count}")
 
-    db.save()
-    log.info(
-        "Diputados: scraped %s new votaciones (checked %s IDs, total in DB: %s)"
-        % (new_count, checked, len(db.votaciones))
-    )
+    if new_count > 0:
+        db.save()
+        log.info(
+            "Diputados: scraped %s new votaciones (checked %s IDs, total in DB: %s)"
+            % (new_count, checked, len(db.votaciones))
+        )
+    else:
+        log.info(
+            "Diputados: no new votaciones (checked %s IDs, total in DB: %s)"
+            % (checked, len(db.votaciones))
+        )

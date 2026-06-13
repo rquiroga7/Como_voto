@@ -174,8 +174,14 @@ def scrape_senadores() -> None:
             else:
                 log.warning(f"    No vote data for senado votacion {acta_id}")
 
-    db.save()
-    log.info(
-        "Senadores: scraped %s new votaciones (total in DB: %s)"
-        % (new_count, len(db.votaciones))
-    )
+    if new_count > 0:
+        db.save()
+        log.info(
+            "Senadores: scraped %s new votaciones (total in DB: %s)"
+            % (new_count, len(db.votaciones))
+        )
+    else:
+        log.info(
+            "Senadores: no new votaciones (total in DB: %s)"
+            % (len(db.votaciones))
+        )
