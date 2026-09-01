@@ -33,11 +33,31 @@ _SYSTEM_PROMPT = (
     "1. Si la ley tiene un nombre popular o mediático bien establecido en Argentina "
     "(como 'Ley de Alquileres', 'Ficha Limpia', 'IVE', 'Ley Ómnibus', 'RIGI', etc.), usá ese nombre.\n"
     "2. Si no tiene nombre popular, generá un nombre descriptivo conciso.\n"
-    "3. IMPORTANTE: Si el título describe una moción o procedimiento parlamentario "
+    "3. IMPORTANTE - Tipos procedimentales: Si el título describe una moción o procedimiento parlamentario "
     "('Apartamiento de Reglamento', 'Moción de Orden', 'Moción de Reconsideración', "
-    "'Habilitación del tratamiento', etc.), el nombre DEBE empezar con ese tipo procedimental "
+    "'Habilitación del tratamiento', 'Tratamiento sobre tablas', etc.), el nombre DEBE empezar con ese tipo procedimental "
     "y NUNCA con 'Ley'. Ejemplos correctos: 'Apartamiento de Reglamento Ferraro', "
     "'Moción de Orden Soria', 'Habilitación tratamiento tablas'.\n"
+    "4. IMPORTANTE - Declaraciones y resoluciones: Si el título es un 'Proyecto de Declaración', "
+    "'Proyecto de Resolución', 'Beneplácito', 'Homenaje', 'Declaración de interés', 'Fiesta Nacional', "
+    "'Día Nacional', etc., NO es una ley. El nombre DEBE empezar con 'Declaración', 'Beneplácito', "
+    "'Resolución' o similar y NUNCA con 'Ley'. Ejemplos: 'Declaración Beneplácito Pello', 'Resolución Convocatoria Ministro'.\n"
+    "5. IMPORTANTE - Designaciones y acuerdos: Si el título es un 'Acuerdo para designar', 'Pliego', "
+    "'Designación', 'Propuesta de designación', 'Ascenso', 'Nombramiento' de jueces, fiscales, embajadores, "
+    "miembros de fuerzas armadas, etc., NO es una ley. El nombre DEBE empezar con 'Acuerdo', 'Pliego', "
+    "'Designación', 'Ascenso' y NUNCA con 'Ley'. Ejemplos: 'Acuerdo Designación Juez', 'Pliego Embajador Oxenford', "
+    "'Ascenso Militares'.\n"
+    "6. IMPORTANTE - Tratados y convenios: Si el título es aprobación de un tratado, convenio o acuerdo internacional, "
+    "el nombre debe reflejar el acuerdo (ej. 'Acuerdo con Chile', 'Convenio FONPLATA') y puede empezar con 'Acuerdo' "
+    "o 'Convenio', no necesariamente 'Ley'.\n"
+    "7. IMPORTANTE - Temas Varios: Si el título es genérico 'Temas Varios O.D. ...' sin descripción de ley específica, "
+    "el nombre debe ser 'Temas Varios' o similar, NUNCA inventes 'Ley de ...'.\n"
+    "8. IMPORTANTE - Múltiples votaciones por artículos/capítulos: Si el título contiene referencia a capítulo, artículo, "
+    "título o inciso específico (ej. 'Artículo 11', 'Cap. 2 Art. 12 al Art. 15', 'Título IX'), el nombre debe ser el de "
+    "la LEY COMPLETA, sin mencionar el artículo/capítulo. Ejemplo: para 'Presupuesto Ejercicio Fiscal 2004 ** Artículo 11' "
+    "el nombre correcto es 'Presupuesto 2004', NO 'Presupuesto Artículo 11'. Para 'Exp. 57 - S - 04 * O.D. 764 * "
+    "Capítulo 1 * Art. 2 al Art. 9. Régimen Federal de Responsabilidad Fiscal' el nombre es "
+    "'Régimen Federal de Responsabilidad Fiscal'.\n"
     "Respondé ÚNICAMENTE con JSON válido en este formato exacto:\n"
     '{"name": "nombre corto", "keywords": ["kw1", "kw2"]}\n'
     "Reglas:\n"
@@ -61,6 +81,52 @@ def cache_key(title: str) -> str:
         .lower()
         .strip()
     )
+
+
+def _strip_section_suffix(title: str) -> str:
+    """Strip En General/Particular and Capítulo/Título/Artículo suffixes.
+
+    Mirrors como_voto_generator.laws._strip_section_suffix but kept here
+    to avoid circular imports. Must stay in sync.
+    """
+    if not title:
+        return title
+    t = title.strip()
+    t = re.sub(r"\s*[-–—]+\s*En\s+General\s*\.?\s*$", "", t, flags=re.I)
+    t = re.sub(r"\s*[-–—]+\s*En\s+Particular\s*\.?\s*$", "", t, flags=re.I)
+    t = re.sub(r"\s*Votaci[oó]n\s+en\s+General\s*\.?\s*$", "", t, flags=re.I)
+    # Middle " - Artículo 8. Presupuestos..." -> " - Presupuestos..."
+    t = re.sub(
+        r"\s*[-–—*]+\s*Art(?:\.|iculo)?s?\s*[0-9°ºNro\.\s]+(?:\s*(?:al|a|y|,)\s*[0-9°º]+)?\s*\.\s*",
+        " - ",
+        t,
+        flags=re.I,
+    )
+    t = re.sub(r"\s*[-–—*]+\s*Cap(?:\.|itulo)?\s*[IVXLCDM0-9]+\s*[-–—*]*\s*", " ", t, flags=re.I)
+    t = re.sub(r"\s*[-–—*]+\s*T[íi]tulo\s*[IVXLCDM0-9]+\s*[-–—*]*\s*", " ", t, flags=re.I)
+    # Trailing to end - handle "10o", "10º", "10", roman numerals, etc.
+    t = re.sub(
+        r"\s*[-–—*]+\s*(?:Art(?:\.|iculo)?s?|Cap(?:\.|itulo)?|T[íi]tulo)\s*[IVXLCDM0-9°ºoa]+(?:\s*(?:al|a|y|,)\s*[IVXLCDM0-9°ºoa]+)*\s*\.?\s*$",
+        "",
+        t,
+        flags=re.I,
+    )
+    t = re.sub(r"\s*\*+\s*Art(?:\.|iculo)?s?\s*[0-9°ºoa]+.*$", "", t, flags=re.I)
+    t = re.sub(
+        r"\s*[-–—]+\s*T[íi]tulo\s+[IVXLCDM0-9]+\s*[-–—]+\s*Art(?:\.|iculo)?s?\s*[0-9°ºoa]+.*$",
+        "",
+        t,
+        flags=re.I,
+    )
+    t = re.sub(r"\s+", " ", t).strip(" -–—*.,")
+    t = re.sub(r"\s*-\s*-\s*", " - ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def base_cache_key(title: str) -> str:
+    """Normalized key for base law title (without section suffix)."""
+    return cache_key(_strip_section_suffix(title))
 
 
 def load_ai_cache() -> dict[str, str]:
@@ -191,11 +257,11 @@ def _call_ai_api(title: str, slug_hint: str = "") -> tuple[str, list[str]]:
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": user_msg},
             ],
-            "max_tokens": 100,
+            "max_tokens": 250,
             "temperature": 0.2,
             "response_format": {"type": "json_object"},
         },
-        timeout=30,
+        timeout=60,
     )
     resp.raise_for_status()
     content = resp.json()["choices"][0]["message"]["content"].strip()
@@ -267,14 +333,20 @@ def generate_ai_names_for_groups(
         title = (group.get("title") or "").strip()
         if len(title) < 10:
             continue
-        k = cache_key(title)
-        if k in cache:
+        # Use base title without En General/Capítulo/Artículo so all
+        # votaciones of the same law share one AI name
+        base_title = _strip_section_suffix(title)
+        if len(base_title) < 10:
+            base_title = title
+        k = cache_key(base_title)
+        # Also check original full title key for backward compatibility
+        if k in cache or cache_key(title) in cache:
             continue
         if k in seen_keys:
             continue
         seen_keys.add(k)
         slug_hint = _slugs_for_group(group, slug_map)
-        to_generate.append((title, slug_hint))
+        to_generate.append((base_title, slug_hint))
 
     if not to_generate:
         log.info("AI names: cache is up to date, nothing to generate.")

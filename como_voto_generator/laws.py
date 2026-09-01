@@ -330,6 +330,74 @@ def COMMON_NORM(value: str) -> str:
     )
 
 
+def _strip_section_suffix(title: str) -> str:
+    """Return title without En General/Particular and Capítulo/Título/Artículo suffixes.
+
+    Used to ensure that multiple votaciones of the same law (En General,
+    Capítulo, Artículo) share the same base key for AI name lookup.
+    Keeps the law description (e.g. 'Régimen Federal...') and OD/Exp prefix,
+    but removes the procedural section marker.
+
+    Examples:
+        'Presupuesto Ejercicio Fiscal 2004 ** Artículo 11' -> 'Presupuesto Ejercicio Fiscal 2004'
+        'Exp. 57 - S - 04 * O.D. 764 * Capítulo 1 * Art. 2 al Art. 9. Régimen...' -> 'Exp. 57 - S - 04 * O.D. 764 Régimen...'
+        'Exp. 2843-D-06 y otro - Orden del Día 1479 - Artículo 8. Presupuestos...' -> 'Exp. 2843-D-06 y otro - Orden del Día 1479 Presupuestos...'
+    """
+    if not title:
+        return title
+    t = title.strip()
+    # Remove En General / En Particular at end
+    t = re.sub(r"\s*[-–—]+\s*En\s+General\s*\.?\s*$", "", t, flags=re.I)
+    t = re.sub(r"\s*[-–—]+\s*En\s+Particular\s*\.?\s*$", "", t, flags=re.I)
+    t = re.sub(r"\s*Votaci[oó]n\s+en\s+General\s*\.?\s*$", "", t, flags=re.I)
+    # Remove middle " - Artículo 8. Presupuestos..." -> " - Presupuestos..."
+    # This handles cases where article is followed by law description after "."
+    t = re.sub(
+        r"\s*[-–—*]+\s*Art(?:\.|iculo)?s?\s*[0-9°ºNro\.\s]+(?:\s*(?:al|a|y|,)\s*[0-9°º]+)?\s*\.\s*",
+        " - ",
+        t,
+        flags=re.I,
+    )
+    t = re.sub(
+        r"\s*[-–—*]+\s*Cap(?:\.|itulo)?\s*[IVXLCDM0-9]+\s*[-–—*]*\s*",
+        " ",
+        t,
+        flags=re.I,
+    )
+    t = re.sub(
+        r"\s*[-–—*]+\s*T[íi]tulo\s*[IVXLCDM0-9]+\s*[-–—*]*\s*",
+        " ",
+        t,
+        flags=re.I,
+    )
+    # Remove trailing article/capitulo/titulo to end (no following law description) - handle "10o" etc.
+    t = re.sub(
+        r"\s*[-–—*]+\s*(?:Art(?:\.|iculo)?s?|Cap(?:\.|itulo)?|T[íi]tulo)\s*[IVXLCDM0-9°ºoa]+(?:\s*(?:al|a|y|,)\s*[IVXLCDM0-9°ºoa]+)*\s*\.?\s*$",
+        "",
+        t,
+        flags=re.I,
+    )
+    # Handle "** Artículo 11" style
+    t = re.sub(r"\s*\*+\s*Art(?:\.|iculo)?s?\s*[0-9°ºoa]+.*$", "", t, flags=re.I)
+    # Also handle "Título IX - Artículo 10º" combos that may remain
+    t = re.sub(
+        r"\s*[-–—]+\s*T[íi]tulo\s+[IVXLCDM0-9]+\s*[-–—]+\s*Art(?:\.|iculo)?s?\s*[0-9°ºoa]+.*$",
+        "",
+        t,
+        flags=re.I,
+    )
+    t = re.sub(r"\s+", " ", t).strip(" -–—*.,")
+    # If we ended up with " - " in middle, normalize
+    t = re.sub(r"\s*-\s*-\s*", " - ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def _base_cache_key(title: str) -> str:
+    """Normalized key for base law title (without section suffix)."""
+    return COMMON_NORM(_strip_section_suffix(title))
+
+
 _NON_LAW_VOTE_MARKERS = (
     "apartamiento de reglamento",
     "apartamiento del reglamento",
@@ -372,6 +440,20 @@ _SUSPICIOUS_AI_LAW_CUES = (
     "preferencia",
     "interpelacion",
     "proyecto de resolucion",
+    "proyecto de declaracion",
+    "beneplacito",
+    "declaracion de interes",
+    "declaracion de interes nacional",
+    "fiesta nacional",
+    "dia nacional",
+    "homenaje",
+    "monumento historico",
+    "acuerdo para designar",
+    "acuerdo para posibilitar",
+    "acuerdo para promover",
+    "pliego",
+    "designacion",
+    "temas varios",
     "pedido de informes",
     "texto propuesto por",
 )
@@ -509,7 +591,14 @@ def get_common_name(title: str) -> str | None:
         return best_name
 
     # Fall back to AI-generated cache, but filter obvious procedural/person aliases.
-    ai_name = _get_ai_names_cache().get(normalized_title)
+    # Try exact normalized title first, then base title without section suffix
+    # (so 'Presupuesto ... Art. 11' and 'Presupuesto ... Art. 12' share the same base name)
+    cache = _get_ai_names_cache()
+    ai_name = cache.get(normalized_title)
+    if ai_name is None:
+        base_key = _base_cache_key(title)
+        if base_key != normalized_title:
+            ai_name = cache.get(base_key)
     return _sanitize_ai_common_name(ai_name, normalized_title)
 
 
