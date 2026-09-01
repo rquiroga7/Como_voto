@@ -280,6 +280,15 @@ def generate_ai_names_for_groups(
         log.info("AI names: cache is up to date, nothing to generate.")
         return cache
 
+    # If no API key is configured, skip generation entirely to avoid
+    # spamming 196 warnings and wasting ~60s on daily runs.
+    if not os.environ.get("OPENAI_API_KEY", "").strip():
+        log.warning(
+            f"AI names: OPENAI_API_KEY not set — skipping generation of {len(to_generate)} titles "
+            f"(cache remains {len(cache)} entries). Set secret to enable."
+        )
+        return cache
+
     log.info(f"AI names: generating {len(to_generate)} new titles…")
     keywords_cache = load_ai_keywords_cache()
     succeeded = 0
