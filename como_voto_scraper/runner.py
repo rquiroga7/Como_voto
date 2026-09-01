@@ -28,13 +28,25 @@ def main() -> None:
 
     targets = parse_run_targets(sys.argv[1:])
 
+    # Run each chamber independently so a failure/timeout in one
+    # (e.g. HCDN 403/captcha after 2026-07-30) does not block the other.
+    # See hcdn.py:86 and update-data.yml:30.
     if "diputados" in targets:
-        scrape_diputados()
+        try:
+            scrape_diputados()
+        except Exception as exc:  # noqa: BLE001
+            log.error(f"Diputados scraper failed (continuing to senadores): {exc}", exc_info=True)
 
     if "senadores" in targets:
-        scrape_senadores()
+        try:
+            scrape_senadores()
+        except Exception as exc:  # noqa: BLE001
+            log.error(f"Senadores scraper failed: {exc}", exc_info=True)
 
     if "fotos" in targets:
-        run_photo_scrapers()
+        try:
+            run_photo_scrapers()
+        except Exception as exc:  # noqa: BLE001
+            log.error(f"Fotos scraper failed: {exc}", exc_info=True)
 
     log.info("Scraping complete!")

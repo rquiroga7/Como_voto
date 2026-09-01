@@ -2,9 +2,14 @@ name: Update Data & Deploy
 
 on:
   schedule:
-    # Run every day at 07:00 UTC (04:00 GMT-3)
+    # Daily votaciones only (no photos) — keep traffic minimal
     - cron: '0 7 * * *'
   workflow_dispatch:  # Allow manual runs
+    inputs:
+      target:
+        description: 'Scrape target (diputados/senadores/fotos or all)'
+        required: false
+        default: 'all'
 
 permissions:
   contents: write
@@ -27,9 +32,18 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run scraper
-        run: python scraper.py
-        timeout-minutes: 120
+      # Independent chamber scrapes: HCDN 403/captcha after 2026-07-30
+      # must not block Senado. See runner.py:33 and hcdn.py:86.
+      # Each does minimal traffic: slug_map checks only current year
+      # (1 POST) + delta votaciones (tail scan max 80 probes).
+      - name: Run scraper - Senadores
+        run: python scraper.py senadores
+        timeout-minutes: 30
+
+      - name: Run scraper - Diputados
+        run: python scraper.py diputados
+        timeout-minutes: 30
+        continue-on-error: true
 
       - name: Check for new data
         id: check_new

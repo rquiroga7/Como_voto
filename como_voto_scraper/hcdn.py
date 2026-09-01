@@ -87,6 +87,11 @@ def fetch_hcdn_slug_map(update_latest_only: bool = False) -> dict[str, str]:
     """Scrape /votaciones/search for every year to build a complete id->slug map.
     
     If update_latest_only is True, only fetch the current year and merge with cache.
+
+    NOTE (2026-07-30 change): HCDN now requires grecaptcha `rtk` token
+    for /votaciones/search and returns a shell HTML with 0 `redirectActa`
+    rows.  We detect this (0 rows + no DataTable) and keep the cached
+    map, letting the tail-scan fallback discover new IDs instead.
     """
     slug_map: dict[str, str] = {}
     current_year = datetime.now().year
@@ -116,10 +121,15 @@ def fetch_hcdn_slug_map(update_latest_only: bool = False) -> dict[str, str]:
                 data={"txtSearch": "", "anoSearch": str(year)},
                 timeout=20,
             )
+            if resp.status_code == 403:
+                log.warning(f"  Slug map: {year} got 403 — site may be down/rate-limited, keeping cache")
+                continue
             matches = re.findall(r"redirectActa\((\d+),(\d+),'([^']*)'\)", resp.text)
             for votacion_id, _, slug in matches:
                 slug_map[votacion_id] = slug
             log.info(f"  Slug map: {year}: {len(matches)} rows")
+            if not matches and "recaptcha" in resp.text.lower() and "grecaptcha" in resp.text.lower():
+                log.warning(f"  Slug map: {year} returned recaptcha shell (site now requires rtk token) — search is broken, will use tail scan")
         except Exception as exc:
             log.warning(f"  Slug map: {year} failed: {exc}")
         time.sleep(REQUEST_DELAY)
@@ -317,6 +327,147 @@ def scrape_hcdn_votacion(votacion_id: str) -> dict | None:
     return parse_hcdn_page(resp, votacion_id, url)
 
 
+def _tail_scan_new_votaciones(
+    db: ConsolidatedDB,
+    slug_map: dict[str, str],
+    max_consecutive_misses: int = 12,
+    max_probe: int = 80,
+) -> int:
+    """Discover votaciones beyond the slug_map without brute-forcing the whole range.
+
+    The HCDN search endpoint (/votaciones/search) now requires a
+    grecaptcha `rtk` token (added ~2026-07-30) and returns a shell
+    HTML with 0 `redirectActa` rows.  Instead of scanning 1..6000,
+    we only probe incrementally after the highest known ID.
+
+    This is O(new_votaciones) not O(all_ids) and avoids the
+    expensive `find_slug_url` brute-force over 25 suffixes.
+
+    Returns number of new votaciones saved.
+    """
+    if not slug_map and not db.votaciones:
+        return 0
+
+    try:
+        max_slug = max(int(k) for k in slug_map) if slug_map else 0
+    except ValueError:
+        max_slug = 0
+    try:
+        max_db = max(int(k) for k in db._votacion_ids) if db._votacion_ids else 0  # type: ignore[attr-defined]
+    except ValueError:
+        max_db = 0
+    start = max(max_slug, max_db) + 1
+    # If DB is empty, start from 1 would be brute-force — skip tail scan
+    if start <= 1:
+        return 0
+
+    log.info(f"Trying incremental tail scan from ID {start} (max_consecutive_misses={max_consecutive_misses}, max_probe={max_probe})...")
+    new_count = 0
+    consecutive_misses = 0
+    consecutive_403 = 0
+    probed = 0
+
+    for vid_int in range(start, start + max_probe):
+        vid = str(vid_int)
+        if db.has_votacion(vid):
+            consecutive_misses = 0
+            continue
+
+        probed += 1
+        # Prefer slug from map if available, otherwise bare URL
+        slug = slug_map.get(vid, "")
+        url = build_hcdn_votacion_url(vid, slug)
+        resp = fetch(url, delay=REQUEST_DELAY, raise_for_status=False)
+
+        if resp is None:
+            consecutive_misses += 1
+            consecutive_403 = 0
+            if consecutive_misses >= max_consecutive_misses:
+                log.info(f"  Tail scan: {consecutive_misses} consecutive misses, stopping at ID {vid}")
+                break
+            continue
+
+        if resp.status_code == 403:
+            consecutive_403 += 1
+            log.warning(f"  [{vid}] 403 Forbidden (consecutive {consecutive_403}) — site may be rate-limiting or down")
+            if consecutive_403 >= 3:
+                log.warning("  Tail scan aborted after 3 consecutive 403s")
+                break
+            consecutive_misses += 1
+            if consecutive_misses >= max_consecutive_misses:
+                break
+            continue
+
+        consecutive_403 = 0
+
+        if resp.status_code == 417:
+            # 417 = no such acta (gap) — not an error
+            consecutive_misses += 1
+            if consecutive_misses >= max_consecutive_misses:
+                log.info(f"  Tail scan: {consecutive_misses} consecutive 417 gaps, stopping at ID {vid}")
+                break
+            continue
+
+        if resp.status_code != 200:
+            # 500 may need slug fallback, 404 etc.
+            if resp.status_code == 500 and not slug:
+                slug_url = find_slug_url(vid)
+                if slug_url:
+                    resp2 = fetch(slug_url, delay=REQUEST_DELAY, raise_for_status=False)
+                    if resp2 is not None and resp2.status_code == 200:
+                        data = parse_hcdn_page(resp2, vid, slug_url)
+                        if data and data.get("votes"):
+                            db.add_votacion(data)
+                            new_count += 1
+                            consecutive_misses = 0
+                            log.info(f"  [{vid}] {data.get('title','')[:80]} (via slug)")
+                            # keep slug_map up to date for future runs
+                            slug_map[vid] = slug_url.split("/votacion/")[1].split("/")[0] if "/votacion/" in slug_url else ""
+                            continue
+            consecutive_misses += 1
+            if consecutive_misses >= max_consecutive_misses:
+                break
+            continue
+
+        # 200 — check if it's a real votacion page
+        if "¿CÓMO VOTÓ?" not in resp.text:
+            consecutive_misses += 1
+            if consecutive_misses >= max_consecutive_misses:
+                log.info(f"  Tail scan: {consecutive_misses} misses (no vote table), stopping at {vid}")
+                break
+            continue
+
+        data = parse_hcdn_page(resp, vid, url)
+        if data and data.get("votes"):
+            db.add_votacion(data)
+            new_count += 1
+            consecutive_misses = 0
+            log.info(f"  [{vid}] {data.get('title','')[:80]}")
+            if new_count % 20 == 0:
+                db.save()
+                log.info(f"  Checkpoint (tail): saved {new_count} new (ID {vid})")
+        else:
+            consecutive_misses += 1
+            if consecutive_misses >= max_consecutive_misses:
+                break
+
+    if probed:
+        log.info(f"Tail scan probed {probed} IDs, saved {new_count} new")
+
+    # Persist any new slug entries discovered during tail scan
+    if new_count and slug_map:
+        try:
+            import json as _json
+
+            with open(SLUG_MAP_CACHE_FILE, "w", encoding="utf-8") as fh:
+                _json.dump(slug_map, fh)
+            log.info(f"Updated slug map cache with tail-scan entries: {SLUG_MAP_CACHE_FILE}")
+        except Exception as exc:  # noqa: BLE001
+            log.warning(f"Failed to save slug map after tail scan: {exc}")
+
+    return new_count
+
+
 def scrape_diputados() -> None:
     """Scrape all Diputados votaciones."""
     log_section("SCRAPING DIPUTADOS")
@@ -355,11 +506,22 @@ def scrape_diputados() -> None:
         if checked % 200 == 0:
             log.info(f"  Progress: checked {checked}, saved {new_count}")
 
+    # Fallback for site changes after 2026-07-30: search now needs
+    # grecaptcha rtk token and returns 0 rows.  Probe incrementally
+    # beyond max known ID instead of brute-forcing 1..6000.
+    tail_new = 0
+    if checked == 0 or new_count == 0:
+        # Only run tail scan if slug_map iteration found nothing —
+        # avoids double work when search still works.
+        # Also run if search returned 0 rows for current year (stale map).
+        tail_new = _tail_scan_new_votaciones(db, slug_map)
+        new_count += tail_new
+
     if new_count > 0:
         db.save()
         log.info(
-            "Diputados: scraped %s new votaciones (checked %s IDs, total in DB: %s)"
-            % (new_count, checked, len(db.votaciones))
+            "Diputados: scraped %s new votaciones (checked %s IDs via map + %s via tail, total in DB: %s)"
+            % (new_count, checked, tail_new, len(db.votaciones))
         )
     else:
         log.info(

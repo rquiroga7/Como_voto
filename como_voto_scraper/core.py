@@ -21,7 +21,10 @@ SENADO_BASE = "https://www.senado.gob.ar"
 # Rate-limiting: seconds between requests
 REQUEST_DELAY = 0.3
 SECTION_DIVIDER = "=" * 60
-DEFAULT_RUN_TARGETS = ("diputados", "senadores", "fotos")
+# Daily runs should only scrape votaciones; photos are heavy and
+# should be triggered explicitly (e.g. bi-monthly workflow).
+# See runner.py:11 and .github/workflows/update-data.yml:5
+DEFAULT_RUN_TARGETS = ("diputados", "senadores")
 
 logging.basicConfig(
     level=logging.INFO,
