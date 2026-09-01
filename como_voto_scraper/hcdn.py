@@ -481,9 +481,31 @@ def scrape_diputados() -> None:
     new_count = 0
     checked = 0
 
-    log.info(f"Iterating {len(slug_map)} known IDs from slug map")
-    for vid_int in sorted(int(key) for key in slug_map):
+    # Avoid IP blocking: daily run should not re-try every old gap
+    # (e.g. 2109) with 30s timeout each. Only check recent missing IDs
+    # + tail scan beyond max. Full backfill can be run manually with
+    # `python scraper.py diputados --full` if needed.
+    try:
+        max_db_id = max(int(k) for k in db._votacion_ids) if db._votacion_ids else 0  # type: ignore[attr-defined]
+    except ValueError:
+        max_db_id = 0
+    # Only consider missing IDs within last 800 IDs or beyond max (tail)
+    # This limits daily traffic to ~80-150 fetches instead of 125+ old gaps.
+    recent_threshold = max_db_id - 800
+    candidate_ids = [
+        vid_int
+        for vid_int in sorted(int(key) for key in slug_map)
+        if not db.has_votacion(str(vid_int)) and vid_int > recent_threshold
+    ]
+    log.info(
+        f"Iterating {len(candidate_ids)} recent missing IDs from slug map (threshold >{recent_threshold}, total map {len(slug_map)})"
+    )
+
+    consecutive_timeouts = 0
+    consecutive_403 = 0
+    for vid_int in candidate_ids:
         vid = str(vid_int)
+        # Already filtered, but keep check for safety
         if db.has_votacion(vid):
             continue
 
@@ -491,7 +513,27 @@ def scrape_diputados() -> None:
         url = build_hcdn_votacion_url(vid, slug_map[vid])
 
         resp = fetch(url, delay=REQUEST_DELAY, raise_for_status=False)
-        if resp is None or resp.status_code != 200:
+        if resp is None:
+            consecutive_timeouts += 1
+            log.warning(f"  [{vid}] fetch timeout/failure ({consecutive_timeouts}/5 consecutive)")
+            if consecutive_timeouts >= 5:
+                log.warning("  Too many consecutive timeouts — HCDN site may be down/rate-limited, aborting map iteration early")
+                break
+            continue
+        # Reset timeout counter on any response
+        consecutive_timeouts = 0
+
+        if resp.status_code == 403:
+            consecutive_403 += 1
+            log.warning(f"  [{vid}] 403 Forbidden ({consecutive_403}/3)")
+            if consecutive_403 >= 3:
+                log.warning("  Aborting map iteration after 3 consecutive 403s")
+                break
+            continue
+        consecutive_403 = 0
+
+        if resp.status_code != 200:
+            # 417 = gap, 500 = slug needed etc. — not a timeout, don't count
             continue
 
         data = parse_hcdn_page(resp, vid, url)
