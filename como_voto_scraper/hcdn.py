@@ -141,6 +141,24 @@ def fetch_hcdn_slug_map(update_latest_only: bool = False) -> dict[str, str]:
     return slug_map
 
 
+def _is_hcdn_available() -> bool:
+    """Lightweight health check to avoid brute-forcing when HCDN is down.
+
+    Returns False if HCDN returns 403/timeout, in which case callers
+    should abort without iterating over votaciones to avoid IP blocking.
+    """
+    try:
+        resp = SESSION.get(HCDN_BASE, timeout=8)
+        if resp.status_code == 403:
+            log.warning("HCDN health check: 403 Forbidden — site is blocking, aborting scrape to avoid IP ban")
+            return False
+        # Any 2xx/3xx is considered available; even 5xx is not a block
+        return resp.status_code < 500
+    except requests.RequestException as exc:
+        log.warning(f"HCDN health check failed: {exc} — aborting scrape to avoid brute-force on down site")
+        return False
+
+
 def get_slug_map() -> dict[str, str]:
     """Return the cached id->slug map, building it on the first call."""
     global _SLUG_MAP
@@ -471,6 +489,13 @@ def _tail_scan_new_votaciones(
 def scrape_diputados() -> None:
     """Scrape all Diputados votaciones."""
     log_section("SCRAPING DIPUTADOS")
+
+    # Early abort if HCDN is down/blocking (403/timeout on health check).
+    # This prevents brute-forcing 3054 IDs when site returns 403 as seen
+    # 2026-09-01 13:25:20 Read timed out / 403 on votaciones.hcdn.gob.ar.
+    if not _is_hcdn_available():
+        log.warning("Skipping Diputados scrape — HCDN site unavailable (health check failed)")
+        return
 
     db = ConsolidatedDB(DATA_DIR / "diputados.json")
     db.load()
