@@ -7,7 +7,11 @@ import unicodedata
 from collections import defaultdict
 from datetime import datetime
 
-from .ai_names import cache_key as _ai_cache_key, load_ai_keywords_cache as _load_ai_kw
+from .ai_names import (
+    _strip_section_suffix as _ai_strip_section,
+    cache_key as _ai_cache_key,
+    load_ai_keywords_cache as _load_ai_kw,
+)
 from .common import DATA_DIR, DOCS_DATA_DIR, log, save_json
 from .data_loading import clean_date, extract_year, load_all_votaciones_from_db, practical_year_range
 from .laws import get_common_name, EXCLUDED_VOTE_IDS, is_non_law_vote
@@ -160,6 +164,13 @@ def build_law_detail_data(law_groups: dict) -> tuple[list[dict], dict[int, dict]
         if group.get("common_name"):
             law_entry["cn"] = group["common_name"]
         kw = _get_ai_kw_cache().get(_ai_cache_key(group.get("title", "")))
+        if kw is None:
+            # Fall back to the section-stripped base title so keyword
+            # lookups survive whitespace/suffix differences between the
+            # raw title and the cache key (mirrors get_common_name).
+            base_title = _ai_strip_section(group.get("title", ""))
+            if base_title != group.get("title", ""):
+                kw = _get_ai_kw_cache().get(_ai_cache_key(base_title))
         if kw:
             law_entry["kw"] = kw
 
