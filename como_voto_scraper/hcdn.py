@@ -19,6 +19,7 @@ from .core import (
     log,
     log_section,
     parse_vote_counts,
+    polite_sleep,
 )
 from .db import ConsolidatedDB
 
@@ -132,7 +133,7 @@ def fetch_hcdn_slug_map(update_latest_only: bool = False) -> dict[str, str]:
                 log.warning(f"  Slug map: {year} returned recaptcha shell (site now requires rtk token) — search is broken, will use tail scan")
         except Exception as exc:
             log.warning(f"  Slug map: {year} failed: {exc}")
-        time.sleep(REQUEST_DELAY)
+        polite_sleep()
 
     with_slug = sum(1 for slug in slug_map.values() if slug)
     log.info(
@@ -261,7 +262,7 @@ def find_slug_url(votacion_id: str) -> str | None:
                     return url
             except Exception:
                 pass
-            time.sleep(REQUEST_DELAY)
+            polite_sleep()
 
     log.warning(f"  [{votacion_id}] Could not find slug URL (title: {title[:60]})")
     return None

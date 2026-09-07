@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import random
 import re
 import sys
 import time
@@ -18,8 +20,11 @@ FOTOS_DIR = BASE_DIR / "docs" / "fotos"
 HCDN_BASE = "https://votaciones.hcdn.gob.ar"
 SENADO_BASE = "https://www.senado.gob.ar"
 
-# Rate-limiting: seconds between requests
-REQUEST_DELAY = 0.3
+# Rate-limiting: seconds between requests. Override with COMO_VOTO_DELAY
+# env var (e.g. 2 for slow local runs to avoid rate throttling/IP blocking).
+REQUEST_DELAY = float(os.environ.get("COMO_VOTO_DELAY", "0.3"))
+# Jitter factor (0-1): adds up to delay*jitter extra random seconds per request.
+JITTER_FACTOR = float(os.environ.get("COMO_VOTO_JITTER", "0.25"))
 SECTION_DIVIDER = "=" * 60
 # Daily runs should only scrape votaciones; photos are heavy and
 # should be triggered explicitly (e.g. bi-monthly workflow).
@@ -194,13 +199,18 @@ def build_hcdn_votacion_url(votacion_id: str, slug: str = "") -> str:
     return f"{HCDN_BASE}/votacion/{votacion_id}"
 
 
+def polite_sleep(delay: float = REQUEST_DELAY) -> None:
+    """Sleep `delay` seconds plus random jitter to avoid rate-limiting."""
+    time.sleep(delay + random.uniform(0, delay * JITTER_FACTOR))
+
+
 def fetch(
     url: str,
     delay: float = REQUEST_DELAY,
     raise_for_status: bool = True,
 ) -> requests.Response | None:
     """Fetch a URL with rate limiting and error handling."""
-    time.sleep(delay)
+    polite_sleep(delay)
     try:
         resp = SESSION.get(url, timeout=30)
         if raise_for_status:
