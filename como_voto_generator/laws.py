@@ -503,6 +503,41 @@ def _kw_matches(kw_norm: str, t_norm: str) -> bool:
     return kw_norm in t_norm
 
 
+# Ceremonial/decorational laws that should never appear in "Leyes destacadas":
+# chamber "declaraciones" (except genuine emergency/disaster declarations),
+# gratuitous property transfers, ceremonial "capital nacional de X", festival
+# ("fiesta de la/nacional/provincial") and historic-monument declarations.
+_NON_FEATURED_LAW_MARKERS = (
+    "capital nacional",
+    "fiesta de la",
+    "fiesta nacional",
+    "fiesta provincial",
+    "monumento",
+)
+
+_KEEP_DECLARACION_CUES = ("emergencia", "zona de desastre")
+
+
+def _is_non_featured_law(normalized_text: str, *, check_declaracion: bool = True) -> bool:
+    """Return True if *normalized_text* refers to a decorative/non-featured law.
+
+    ``check_declaracion`` gates the generic "declaracion" marker: vote *titles*
+    often mention "declaración de interés" inside otherwise substantive laws
+    (e.g. Ley Chagas), so the marker is only applied to the common name, never
+    to the raw title. Emergency/disaster declarations ("declaración de
+    emergencia", "zona de desastre") are always kept.
+    """
+    if not normalized_text:
+        return False
+    if "transferencia" in normalized_text and "inmueble" in normalized_text:
+        return True
+    if any(marker in normalized_text for marker in _NON_FEATURED_LAW_MARKERS):
+        return True
+    if check_declaracion and "declaracion" in normalized_text:
+        return not any(cue in normalized_text for cue in _KEEP_DECLARACION_CUES)
+    return False
+
+
 def _sanitize_ai_common_name(candidate: str | None, normalized_title: str) -> str | None:
     if not candidate:
         return None
@@ -588,6 +623,10 @@ def get_common_name(title: str) -> str | None:
                 best_name = common_name
 
     if best_name is not None:
+        if _is_non_featured_law(COMMON_NORM(best_name)) or _is_non_featured_law(
+            normalized_title, check_declaracion=False
+        ):
+            return None
         return best_name
 
     # Fall back to AI-generated cache, but filter obvious procedural/person aliases.
@@ -599,7 +638,13 @@ def get_common_name(title: str) -> str | None:
         base_key = _base_cache_key(title)
         if base_key != normalized_title:
             ai_name = cache.get(base_key)
-    return _sanitize_ai_common_name(ai_name, normalized_title)
+    candidate = _sanitize_ai_common_name(ai_name, normalized_title)
+    if candidate is not None and (
+        _is_non_featured_law(COMMON_NORM(candidate))
+        or _is_non_featured_law(normalized_title, check_declaracion=False)
+    ):
+        return None
+    return candidate
 
 
 # ---------------------------------------------------------------------------
