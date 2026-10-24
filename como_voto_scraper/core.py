@@ -105,27 +105,38 @@ def log_section(title: str) -> None:
 
 
 def parse_vote_counts(container) -> dict[str, int]:
-    """Parse h3/h4 vote counters used by both chamber pages."""
+    """Parse vote counters used by both chamber pages.
+
+    HCDN pages (2026+) render each counter as a numeric <h3> immediately
+    followed by a label <h4> in its own <ul>, so we pair each label with
+    its nearest preceding numeric heading instead of zipping all h3/h4
+    (which mis-paired once the page added extra headings).
+    """
     counts = {
         "afirmativo": 0,
         "negativo": 0,
         "abstencion": 0,
         "ausente": 0,
     }
-    for h3, h4 in zip(container.find_all("h3"), container.find_all("h4")):
-        try:
-            count = int(h3.get_text(strip=True))
-            label = h4.get_text(strip=True).upper()
-            if "AFIRMATIVO" in label:
-                counts["afirmativo"] = count
-            elif "NEGATIVO" in label:
-                counts["negativo"] = count
-            elif "ABSTENCI" in label:
-                counts["abstencion"] = count
-            elif "AUSENTE" in label:
-                counts["ausente"] = count
-        except (ValueError, AttributeError):
+    label_keys = (
+        ("AFIRMATIVO", "afirmativo"),
+        ("NEGATIVO", "negativo"),
+        ("ABSTENCI", "abstencion"),
+        ("AUSENTE", "ausente"),
+    )
+    for h4 in container.find_all("h4"):
+        label = h4.get_text(strip=True).upper()
+        key = next((key for token, key in label_keys if token in label), None)
+        if key is None:
             continue
+        # Only pair labels that are siblings of a numeric counter. Later
+        # filter dropdowns reuse the same labels but have no counter.
+        previous = h4.find_previous_sibling("h3")
+        if previous is None:
+            continue
+        text = previous.get_text(strip=True)
+        if text.isdigit():
+            counts[key] = int(text)
     return counts
 
 
@@ -193,15 +204,33 @@ def clean_senado_name(name: str) -> str:
 
 
 def build_hcdn_votacion_url(votacion_id: str, slug: str = "") -> str:
-    """Build a stable HCDN votacion URL for bare or slug-prefixed IDs."""
+    """Build a stable HCDN votacion URL for bare or slug-prefixed IDs.
+
+    Since ~September 2026 HCDN only serves the ``.html`` variant; the
+    extension-less URLs return 404.
+    """
     if slug:
-        return f"{HCDN_BASE}/votacion/{slug}/{votacion_id}"
-    return f"{HCDN_BASE}/votacion/{votacion_id}"
+        return f"{HCDN_BASE}/votacion/{slug}/{votacion_id}.html"
+    return f"{HCDN_BASE}/votacion/{votacion_id}.html"
 
 
 def polite_sleep(delay: float = REQUEST_DELAY) -> None:
     """Sleep `delay` seconds plus random jitter to avoid rate-limiting."""
     time.sleep(delay + random.uniform(0, delay * JITTER_FACTOR))
+
+
+def _ensure_text_encoding(resp: requests.Response) -> requests.Response:
+    """Decode responses that declare UTF-8 in <meta> but not in the header.
+
+    Requests falls back to ISO-8859-1 when Content-Type has no charset,
+    which mangles accented text (and breaks the ``¿CÓMO VOTÓ?`` marker).
+    """
+    content_type = resp.headers.get("Content-Type", "")
+    if "charset=" not in content_type.lower():
+        detected = resp.apparent_encoding
+        if detected:
+            resp.encoding = detected
+    return resp
 
 
 def fetch(
@@ -213,6 +242,7 @@ def fetch(
     polite_sleep(delay)
     try:
         resp = SESSION.get(url, timeout=30)
+        _ensure_text_encoding(resp)
         if raise_for_status:
             resp.raise_for_status()
         return resp

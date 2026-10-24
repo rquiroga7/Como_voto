@@ -152,7 +152,7 @@ class ConsolidatedDB:
         }
 
         raw_url = raw.get("url", "")
-        slug_match = re.search(r"/votacion/([^/]+)/\d+$", raw_url)
+        slug_match = re.search(r"/votacion/([^/]+)/\d+(?:\.html)?$", raw_url)
         if slug_match:
             entry["sl"] = slug_match.group(1)
 
@@ -190,9 +190,9 @@ class ConsolidatedDB:
                 slug = get_slug_map().get(str(compact.get("id")), "")
             votacion_id = str(compact.get("id"))
             if slug:
-                url = f"{HCDN_BASE}/votacion/{slug}/{votacion_id}"
+                url = f"{HCDN_BASE}/votacion/{slug}/{votacion_id}.html"
             else:
-                url = f"{HCDN_BASE}/votacion/{votacion_id}"
+                url = f"{HCDN_BASE}/votacion/{votacion_id}.html"
         elif chamber == "senadores" and compact.get("id"):
             url = f"{SENADO_BASE}/votaciones/detalleActa/{compact.get('id')}"
 

@@ -109,7 +109,7 @@ def is_contested(year: int | None, pj_majority: str, opp_majority: str) -> bool:
 
 def _article_from_slug(url: str) -> str | None:
     """Extrae una etiqueta de artículo/sección desde un slug de URL de HCDN."""
-    match = re.search(r"/votacion/([^/]+)/\d+$", url)
+    match = re.search(r"/votacion/([^/]+)/\d+(?:\.html)?$", url)
     if not match:
         return None
 

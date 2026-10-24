@@ -71,6 +71,7 @@ COMMON_LAW_NAMES = [
     # --- Codes ---
     (["código procesal penal", "codigo procesal penal"], "Codigo Procesal Penal"),
     (["código penal", "codigo penal"], "Codigo Penal"),
+    (["vandalismo rural", "vandalismo"], "Vandalismo Rural"),
     (["código civil", "codigo civil"], "Codigo Civil"),
     (["código aduanero", "codigo aduanero"], "Codigo Aduanero"),
 
@@ -515,7 +516,7 @@ _NON_FEATURED_LAW_MARKERS = (
     "monumento",
 )
 
-_KEEP_DECLARACION_CUES = ("emergencia", "zona de desastre")
+_KEEP_DECLARACION_CUES = ("emergencia", "zona de desastre", "declaracion jurada")
 
 
 def _is_non_featured_law(normalized_text: str, *, check_declaracion: bool = True) -> bool:
